@@ -155,11 +155,11 @@ test("records, corrects and rejects evidence with actual persistence and preserv
   await page.getByRole("button", { name: "Save note" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.goto("/history");
-  await page.getByLabel("History view").selectOption("evidence");
+  await page.getByRole("button", { name: "Evidence ledger" }).click();
   await expect(
     page.getByText("Superseded · preserved for audit.").first(),
   ).toBeVisible();
-  await page.getByLabel("History view").selectOption("audit");
+  await page.getByRole("button", { name: "Change log" }).click();
   await expect(
     page.getByText("Note: (empty) → Keep this note in the audit trail."),
   ).toBeVisible();
@@ -347,6 +347,7 @@ test("imports a synthetic statement CSV, shows its coverage, and links the accou
   await owner.q("select public.initialize_cards()");
   await login(page, owner);
   await page.goto("/settings");
+  await page.getByText("Import a statement CSV", { exact: true }).click();
   await page.getByLabel("CSV file").setInputFiles({
     name: "synthetic-statement.csv",
     mimeType: "text/csv",

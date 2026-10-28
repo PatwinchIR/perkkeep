@@ -60,25 +60,12 @@ export function SourcesPanel() {
     const c = data.cards.find((x) => x.id === id);
     return c ? `${c.display_name} · ${cardEnding(c.last4)}` : "Unknown card";
   };
+  const attention = linked.some((c) => c.last_error),
+    others = data.connections.filter((c) => !linked.includes(c));
   return (
-    <section className="sources" aria-labelledby="sources-title">
-      <div className="section-heading">
-        <h2 id="sources-title">Connected accounts</h2>
-        <button
-          className="secondary"
-          disabled={!!busy || offline || !data.accounts.length}
-          onClick={() =>
-            void act(
-              "match",
-              () => runSource("runMatchers", {}),
-              "Matching finished. New matches are waiting in Review.",
-            )
-          }
-        >
-          {busy === "match" ? "Matching…" : "Match transactions now"}
-        </button>
-      </div>
-      <p className="hint">
+    <section className="settings-section" aria-labelledby="sources-title">
+      <h2 id="sources-title">Connected accounts</h2>
+      <p>
         Each synced card account becomes one of your cards and is linked to it.
         PerkKeep matches transactions on linked accounts to your benefits after
         every sync. Matches wait in Review until you confirm them, except issuer
@@ -90,74 +77,101 @@ export function SourcesPanel() {
           {error}
         </p>
       )}
-      <div className="settings-grid">
-        {linked.length > 0 && !replacing ? (
-          <div className="settings-card form-stack source-linked">
-            <div className="source-linked-heading">
-              <h2>SimpleFIN</h2>
-              <span
-                className={`badge ${linked.some((c) => c.last_error) ? "needs_review" : "confirmed"}`}
-              >
-                {linked.some((c) => c.last_error)
-                  ? "Needs attention"
-                  : "Linked"}
-              </span>
-            </div>
-            {linked.map((c) => (
-              <div key={c.id} className="form-stack">
+      <div className="settings-group">
+        <div className="settings-row">
+          <span className="metric-icon">
+            <Link2 size={18} />
+          </span>
+          <div className="settings-row-text">
+            <h3>SimpleFIN</h3>
+            {linked.length > 0 && !replacing ? (
+              <>
+                {linked.map((c) => (
+                  <div key={c.id}>
+                    <p>
+                      {c.label ? `${c.label} · ` : ""}
+                      {plural(
+                        data.accounts.filter((a) => a.connection_id === c.id)
+                          .length,
+                        "account",
+                      )}{" "}
+                      · last success {when(c.last_success_at)}. PerkKeep syncs
+                      once a day on its own; SimpleFIN refreshes banks about
+                      once a day.
+                    </p>
+                    {c.last_error && (
+                      <p className="form-error">{c.last_error}</p>
+                    )}
+                    <div className="settings-row-actions">
+                      <SyncButton
+                        id={c.id}
+                        busy={busy}
+                        offline={offline}
+                        act={act}
+                      />
+                    </div>
+                  </div>
+                ))}
+                <div className="settings-row-actions">
+                  <button
+                    className="text-button"
+                    disabled={!!busy || offline}
+                    onClick={() => setReplacing(true)}
+                  >
+                    Replace with a new setup token
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
                 <p>
-                  {c.label ? `${c.label} · ` : ""}
-                  {plural(
-                    data.accounts.filter((a) => a.connection_id === c.id)
-                      .length,
-                    "account",
-                  )}{" "}
-                  · last success {when(c.last_success_at)}. PerkKeep syncs once
-                  a day on its own; SimpleFIN refreshes banks about once a day.
+                  Paste the setup token from SimpleFIN Bridge. PerkKeep claims
+                  it once on the server and stores the resulting access address
+                  encrypted. It is never shown again or sent to your browser.
                 </p>
-                {c.last_error && <p className="form-error">{c.last_error}</p>}
-                <SyncButton id={c.id} busy={busy} offline={offline} act={act} />
-              </div>
-            ))}
-            <button
-              className="text-button"
-              disabled={!!busy || offline}
-              onClick={() => setReplacing(true)}
-            >
-              Replace with a new setup token
-            </button>
-          </div>
-        ) : (
-          <form className="settings-card form-stack" onSubmit={connect}>
-            <h2>Connect SimpleFIN</h2>
-            <p>
-              Paste the setup token from SimpleFIN Bridge. PerkKeep claims it
-              once on the server and stores the resulting access address
-              encrypted. It is never shown again or sent to your browser.
-            </p>
-            <label>
-              SimpleFIN setup token
-              <textarea name="token" required rows={3} autoComplete="off" />
-            </label>
-            <label>
-              Label (optional)
-              <input name="label" maxLength={100} />
-            </label>
-            <button className="primary" disabled={!!busy || offline}>
-              <Link2 size={16} />{" "}
-              {busy === "connect" ? "Connecting…" : "Connect SimpleFIN"}
-            </button>
-            {replacing && (
-              <button
-                type="button"
-                className="text-button"
-                onClick={() => setReplacing(false)}
-              >
-                Keep the current connection
-              </button>
+                <form className="form-stack" onSubmit={connect}>
+                  <label>
+                    SimpleFIN setup token
+                    <textarea
+                      name="token"
+                      required
+                      rows={3}
+                      autoComplete="off"
+                    />
+                  </label>
+                  <label>
+                    Label (optional)
+                    <input name="label" maxLength={100} />
+                  </label>
+                  <div className="settings-row-actions">
+                    <button className="primary" disabled={!!busy || offline}>
+                      <Link2 size={16} />{" "}
+                      {busy === "connect" ? "Connecting…" : "Connect SimpleFIN"}
+                    </button>
+                    {replacing && (
+                      <button
+                        type="button"
+                        className="text-button"
+                        onClick={() => setReplacing(false)}
+                      >
+                        Keep the current connection
+                      </button>
+                    )}
+                  </div>
+                </form>
+              </>
             )}
-          </form>
-        )}
+          </div>
+          <span
+            className={`badge ${!linked.length ? "" : attention ? "needs_review" : "confirmed"}`}
+          >
+            {!linked.length
+              ? "Not connected"
+              : attention
+                ? "Needs attention"
+                : "Linked"}
+          </span>
+        </div>
         <CsvImport
           accounts={data.accounts.filter((a) => a.source === "csv")}
           busy={!!busy || offline}
@@ -178,31 +192,45 @@ export function SourcesPanel() {
             )
           }
         />
+        {others.map((c) => (
+          <div className="settings-row" key={c.id}>
+            <span className="metric-icon">
+              <Link2 size={18} />
+            </span>
+            <div className="settings-row-text">
+              <h3>
+                {c.source === "simplefin" ? "SimpleFIN" : "Plaid Sandbox"}
+                {c.label ? ` · ${c.label}` : ""}
+              </h3>
+              <p>
+                Last success {when(c.last_success_at)} · last attempt{" "}
+                {when(c.last_attempted_at)}
+              </p>
+              {c.last_error && <p className="form-error">{c.last_error}</p>}
+            </div>
+            <SyncButton id={c.id} busy={busy} offline={offline} act={act} />
+          </div>
+        ))}
       </div>
-      {data.connections.some((c) => !linked.includes(c)) && (
-        <div className="sync-log">
-          {data.connections
-            .filter((c) => !linked.includes(c))
-            .map((c) => (
-              <div key={c.id}>
-                <div>
-                  <strong>
-                    {c.source === "simplefin" ? "SimpleFIN" : "Plaid Sandbox"}
-                    {c.label ? ` · ${c.label}` : ""}
-                  </strong>
-                  <span>
-                    Last success {when(c.last_success_at)} · last attempt{" "}
-                    {when(c.last_attempted_at)}
-                  </span>
-                  {c.last_error && <p className="form-error">{c.last_error}</p>}
-                </div>
-                <SyncButton id={c.id} busy={busy} offline={offline} act={act} />
-              </div>
-            ))}
-        </div>
-      )}
+      <div className="settings-subheading">
+        <h3>Accounts</h3>
+        <span className="count">{data.accounts.length}</span>
+        <button
+          className="secondary"
+          disabled={!!busy || offline || !data.accounts.length}
+          onClick={() =>
+            void act(
+              "match",
+              () => runSource("runMatchers", {}),
+              "Matching finished. New matches are waiting in Review.",
+            )
+          }
+        >
+          {busy === "match" ? "Matching…" : "Match transactions now"}
+        </button>
+      </div>
       {data.accounts.length ? (
-        <div className="account-list">
+        <div className="settings-group">
           {data.accounts.map((a) => (
             <AccountRow
               key={a.id}
@@ -356,7 +384,7 @@ function AccountRow({
         {(a.mapping_status === "unmapped" ||
           a.mapping_status === "rejected") && (
           <>
-            <label className="sr-label">
+            <label>
               Card for {a.name}
               <select
                 value={choice}
@@ -434,64 +462,79 @@ function CsvImport({
     form.reset();
   }
   return (
-    <form className="settings-card form-stack" onSubmit={submit}>
-      <h2>Import a statement CSV</h2>
-      <p>
-        Each file is imported once. Its own first and last transaction dates are
-        recorded as coverage. Issuer layouts marked unverified are based on
-        typical exports; check the result after importing.
-      </p>
-      <label>
-        CSV file
-        <input name="file" type="file" accept=".csv,text/csv" required />
-      </label>
-      <label>
-        File layout
-        <select name="format" defaultValue="">
-          <option value="">Detect from the columns</option>
-          {CSV_FORMATS.map((f) => (
-            <option key={f.id} value={f.id}>
-              {f.label}
-              {f.verified ? "" : " (layout unverified)"}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        Import into
-        <select value={target} onChange={(e) => setTarget(e.target.value)}>
-          <option value="new">A new account…</option>
-          {accounts.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.institution} · {a.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      {target === "new" && (
-        <>
-          <label>
-            Institution
-            <input name="institution" required maxLength={200} />
-          </label>
-          <label>
-            Account name
-            <input name="account_name" required maxLength={200} />
-          </label>
-          <label>
-            Last four digits (optional)
-            <input
-              name="mask"
-              inputMode="numeric"
-              pattern="[0-9]{4}"
-              maxLength={4}
-            />
-          </label>
-        </>
-      )}
-      <button className="primary" disabled={busy}>
-        <Upload size={16} /> Import file
-      </button>
-    </form>
+    <div className="settings-row">
+      <span className="metric-icon">
+        <Upload size={18} />
+      </span>
+      <div className="settings-row-text">
+        <h3>Statement CSV</h3>
+        <p>
+          Each file is imported once. Its own first and last transaction dates
+          are recorded as coverage. Issuer layouts marked unverified are based
+          on typical exports; check the result after importing.
+        </p>
+        <details className="settings-disclosure">
+          <summary>Import a statement CSV</summary>
+          <form className="form-stack" onSubmit={submit}>
+            <label>
+              CSV file
+              <input name="file" type="file" accept=".csv,text/csv" required />
+            </label>
+            <label>
+              File layout
+              <select name="format" defaultValue="">
+                <option value="">Detect from the columns</option>
+                {CSV_FORMATS.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.label}
+                    {f.verified ? "" : " (layout unverified)"}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Import into
+              <select
+                value={target}
+                onChange={(e) => setTarget(e.target.value)}
+              >
+                <option value="new">A new account…</option>
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.institution} · {a.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {target === "new" && (
+              <>
+                <label>
+                  Institution
+                  <input name="institution" required maxLength={200} />
+                </label>
+                <label>
+                  Account name
+                  <input name="account_name" required maxLength={200} />
+                </label>
+                <label>
+                  Last four digits (optional)
+                  <input
+                    name="mask"
+                    inputMode="numeric"
+                    pattern="[0-9]{4}"
+                    maxLength={4}
+                  />
+                </label>
+              </>
+            )}
+            <div className="settings-row-actions">
+              <button className="primary" disabled={busy}>
+                <Upload size={16} /> Import file
+              </button>
+            </div>
+          </form>
+        </details>
+      </div>
+    </div>
   );
 }
