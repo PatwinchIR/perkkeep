@@ -601,3 +601,81 @@ describe("card accounts become the owner's cards (synthetic owner, D41)", () => 
     ).toBe("rejected");
   });
 });
+
+describe("SimpleFIN account names as issuers send them (synthetic digits)", () => {
+  it("reads digits in parentheses and identifies products, including Discover under Capital One", async () => {
+    const { identifyAccount } = await import("../src/server/sources/sync");
+    const { maskFrom } = await import("../src/server/sources/simplefin");
+    const cases: [string, string, string | null, string | undefined][] = [
+      [
+        "Chase Bank",
+        "Sapphire Reserve (1111)",
+        "1111",
+        "chase-sapphire-reserve",
+      ],
+      ["Capital One", "Discover it (2222)", "2222", "discover-it"],
+      ["Chase Bank", "Amazon Prime (3333)", "3333", "chase-prime-visa"],
+      ["Citibank", "Citi Strata℠ Card-4444 (4444)", "4444", "citi-strata"],
+      [
+        "Citibank",
+        "Costco Anywhere Visa® Card by Citi-5555 (5555)",
+        "5555",
+        "citi-costco-anywhere",
+      ],
+      [
+        "American Express",
+        "American Express Gold Card (6666)",
+        "6666",
+        "amex-gold",
+      ],
+      ["Chase Bank", "SYNTHETIC HOLDER (7777)", "7777", undefined],
+      ["Synthetic Brokerage", "Brokerage ...123 (123)", null, undefined],
+    ];
+    for (const [institution, name, mask, key] of cases) {
+      expect(maskFrom(name)).toBe(mask);
+      expect(identifyAccount({ institution, name }).product?.key).toBe(key);
+    }
+    expect(
+      identifyAccount({
+        institution: "Capital One",
+        name: "Discover it (2222)",
+      }).issuer?.name,
+    ).toBe("Discover");
+  });
+
+  it("backfills digits, links an unknown-kind account only to a card that already has its digits, and skips bank accounts", async () => {
+    const { linkAccounts } = await import("../src/server/sources/sync");
+    const owner = await user();
+    await owner.q("select public.initialize_cards()");
+    await owner.q(
+      "update public.cards set last4='7777', status='active', identity_verified_at=now() where catalog_key='chase-ink-business-cash'",
+    );
+    const add = (institution: string, name: string, kind: string) =>
+      owner.q(
+        "insert into public.accounts(source,external_ref,institution,name,kind) values('simplefin',$1,$2,$3,$4)",
+        [randomBytes(32).toString("hex"), institution, name, kind],
+      );
+    await add("Chase Bank", "SYNTHETIC HOLDER (7777)", "unknown");
+    await add("Chase Bank", "SYNTHETIC HOLDER (8888)", "unknown");
+    await add("Capital One", "Discover it (2222)", "unknown");
+    await add("Synthetic Bank", "Checking (9999)", "depository");
+    await withOwner(owner.id, (tx) => linkAccounts(tx));
+    const rows = await owner.q(
+      `select a.name, a.mask, a.mapping_status, c.catalog_key from public.accounts a
+       left join public.cards c on c.id=a.card_id order by a.name`,
+    );
+    expect(
+      rows.map((r) => [r.name, r.mask, r.mapping_status, r.catalog_key]),
+    ).toEqual([
+      ["Checking (9999)", "9999", "unmapped", null],
+      ["Discover it (2222)", "2222", "confirmed", "discover-it"],
+      [
+        "SYNTHETIC HOLDER (7777)",
+        "7777",
+        "confirmed",
+        "chase-ink-business-cash",
+      ],
+      ["SYNTHETIC HOLDER (8888)", "8888", "unmapped", null],
+    ]);
+  });
+});

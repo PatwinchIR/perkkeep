@@ -18,7 +18,9 @@
     "db:migrate": "node scripts/db-migrate.mjs",
     "neon:provision": "node scripts/neon-provision.mjs",
     "neon:inspect": "node scripts/neon-inspect.mjs",
-    "owner:cards": "node scripts/owner-cards.mjs"
+    "owner:cards": "node scripts/owner-cards.mjs",
+    "neon:https": "node scripts/neon-https.mjs",
+    "neon:reconcile": "tsx --conditions react-server scripts/neon-reconcile.ts"
   },
   "keywords": [],
   "author": "",
@@ -37,6 +39,7 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "4.14.0",
+    "@neondatabase/serverless": "1.0.2",
     "@playwright/test": "1.64.1",
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "26.6.5",
@@ -49,6 +52,7 @@
     "tailwindcss": "4.3.3",
     "tsx": "4.23.15",
     "typescript": "6.0.3",
+    "undici": "7.16.0",
     "vitest": "5.0.5"
   },
   "overrides": {
