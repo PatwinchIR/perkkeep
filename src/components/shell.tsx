@@ -37,7 +37,7 @@ export function Shell({ children }: { children: ReactNode }) {
           </span>
           perkkeep<span className="brand-dot">.</span>
         </Link>
-        <div className="sidebar-caption">YOUR PERSONAL LEDGER</div>
+        <div className="eyebrow sidebar-caption">Your personal ledger</div>
         <nav aria-label="Main navigation">
           {nav.map(({ href, label, icon: Icon }) => (
             <Link

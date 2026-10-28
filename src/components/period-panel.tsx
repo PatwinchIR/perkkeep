@@ -55,7 +55,7 @@ export function PeriodPanel({
     <article className="period-panel">
       <div className="period-heading">
         <div>
-          <span className="overline">
+          <span className="eyebrow">
             {period.card_name} · {cardEnding(period.last4)}
           </span>
           <h3>{period.benefit_name}</h3>
