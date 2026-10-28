@@ -490,3 +490,42 @@ test("shows a linked SimpleFIN connection without the token box, and hides unuse
   });
   await noOverflow(page);
 });
+
+test("adds a card by hand, removes it without losing history, and restores it from Settings", async ({
+  page,
+}) => {
+  const owner = await user();
+  await owner.q("select public.initialize_cards()");
+  await login(page, owner);
+  await page.goto("/cards");
+  await page.getByRole("button", { name: "Add a card" }).click();
+  await page.getByLabel("Product").fill("Citi Double Cash");
+  await expect(page.getByLabel("Issuer")).toHaveValue("Citi");
+  await page.getByLabel("Last four digits (optional)").fill("9876");
+  await page.getByRole("button", { name: "Add card", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Double Cash" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("First, make sure this is the right card."),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Remove this card" }).click();
+  await page.getByRole("button", { name: "Remove card", exact: true }).click();
+  await expect(page.getByText("This card was removed.")).toBeVisible();
+  await page.goto("/cards");
+  await expect(
+    page.locator(".card-tile", { hasText: "Double Cash" }),
+  ).toHaveCount(0);
+  await page.goto("/settings");
+  const removed = page.locator("section", { hasText: "Removed cards" });
+  await expect(removed).toContainText("Double Cash");
+  await removed.getByRole("button", { name: "Restore" }).click();
+  await expect(
+    page.getByText("Card restored with its full history."),
+  ).toBeVisible();
+  await page.goto("/cards");
+  await expect(
+    page.locator(".card-tile", { hasText: "Double Cash" }),
+  ).toHaveCount(1);
+  await noOverflow(page);
+});

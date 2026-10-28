@@ -1,5 +1,5 @@
 {
-  "$comment": "Card face layout per product. Public data only: placeholder colors, issuer image URLs and positions as percentages of a 1.586:1 face. Positions and band colors were measured on the issuer images on 2026-10-28. 'art' is absent where no clean issuer image was found (the badge is part of the image, or the image includes a drop shadow); those cards keep the placeholder until the owner uploads an image.",
+  "$comment": "Card face layout per product. Public data only: placeholder colors, issuer image URLs and positions as percentages of a 1.586:1 face. Positions and band colors were measured on the issuer images on 2026-10-28. 'art' is absent where no clean issuer image was found (the badge is part of the image, or the image includes a drop shadow); those cards keep the placeholder until the owner uploads an image. Discover publishes its designs only as one gallery image (checked 2026-10-28); 'crop' selects the teal design from it, and owners with another design can upload a photo.",
   "default": {
     "placeholder": ["#4a5a55", "#2f3d39"],
     "text": "#eef1ea",
@@ -111,7 +111,18 @@
     "discover-it": {
       "match": ["Discover it"],
       "placeholder": ["#7fc3e6", "#4f9cc8"],
-      "text": "#10283a"
+      "text": "#f3f8fc",
+      "art": {
+        "page": "https://www.discover.com/credit-cards/cash-back/it-card.html",
+        "image": "https://ecm.capitalone.com/WCM/dfs-card/images/card-art-array/rdesktop.png",
+        "crop": {
+          "left": 2,
+          "top": 2,
+          "width": 400,
+          "height": 253
+        },
+        "bands": []
+      }
     },
     "chase-ink-business-cash": {
       "match": ["Chase Ink Business Cash"],

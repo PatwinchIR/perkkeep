@@ -120,4 +120,38 @@ describe("card art storage", () => {
       1,
     );
   });
+
+  it("crops one design from an issuer gallery before fitting the face", async () => {
+    // Synthetic gallery: a red card at the crop region on a blue background.
+    const gallery = await sharp({
+      create: { width: 600, height: 300, channels: 3, background: "#0000ff" },
+    })
+      .composite([
+        {
+          input: await sharp({
+            create: {
+              width: 200,
+              height: 126,
+              channels: 3,
+              background: "#ff0000",
+            },
+          })
+            .png()
+            .toBuffer(),
+          left: 300,
+          top: 100,
+        },
+      ])
+      .png()
+      .toBuffer();
+    const { bytes } = await normalizeCardImage(gallery, "issuer", {
+      left: 300,
+      top: 100,
+      width: 200,
+      height: 126,
+    });
+    const { dominant } = await sharp(bytes).stats();
+    expect(dominant.r).toBeGreaterThan(200);
+    expect(dominant.b).toBeLessThan(60);
+  });
 });
