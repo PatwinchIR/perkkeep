@@ -1,0 +1,194 @@
+{
+  "$comment": "Card face layout per product. Public data only: placeholder colors, issuer image URLs and positions as percentages of a 1.586:1 face. Positions and band colors were measured on the issuer images on 2026-10-28. 'art' is absent where no clean issuer image was found (the badge is part of the image, or the image includes a drop shadow); those cards keep the placeholder until the owner uploads an image.",
+  "default": {
+    "placeholder": ["#4a5a55", "#2f3d39"],
+    "text": "#eef1ea",
+    "name": {
+      "x": 7,
+      "y": 79
+    },
+    "number": {
+      "x": 7,
+      "y": 88
+    }
+  },
+  "products": {
+    "amex-gold": {
+      "match": ["American Express Gold"],
+      "placeholder": ["#d6bf82", "#a98b4f"],
+      "text": "#2b2414",
+      "name": {
+        "x": 10,
+        "y": 87
+      },
+      "number": {
+        "x": 82,
+        "y": 52.5
+      },
+      "art": {
+        "page": "https://www.americanexpress.com/us/credit-cards/card/gold-card/",
+        "image": "https://www.aexp-static.com/online/myca/shared/summary/cardasset/images/NUS000000174_480x304_STRAIGHT_96.png",
+        "bands": [
+          {
+            "x": 8,
+            "y": 85,
+            "w": 30,
+            "h": 11,
+            "color": "#d9ca8f"
+          },
+          {
+            "x": 81,
+            "y": 51,
+            "w": 13,
+            "h": 9,
+            "color": "#c3b370"
+          },
+          {
+            "x": 70,
+            "y": 74,
+            "w": 11,
+            "h": 8,
+            "color": "#c5b46d"
+          }
+        ]
+      },
+      "digitsOnly": true
+    },
+    "chase-sapphire-reserve": {
+      "match": ["Chase Sapphire Reserve"],
+      "placeholder": ["#1d2a44", "#0b1224"],
+      "text": "#e9edf5",
+      "name": {
+        "x": 7,
+        "y": 79
+      },
+      "number": {
+        "x": 7,
+        "y": 88
+      },
+      "art": {
+        "page": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+        "image": "https://creditcards.chase.com/content/dam/jpmc-marketplace/card-art/sapphire_reserve_card_Halo.png",
+        "bands": []
+      }
+    },
+    "chase-freedom-flex": {
+      "match": ["Chase Freedom Flex"],
+      "placeholder": ["#2ba3d6", "#0a77b5"],
+      "text": "#f3f8fc",
+      "name": {
+        "x": 9,
+        "y": 80.5
+      },
+      "number": {
+        "x": 9,
+        "y": 89
+      },
+      "art": {
+        "page": "https://creditcards.chase.com/cash-back-credit-cards/freedom/flex",
+        "image": "https://creditcards.chase.com/content/dam/jpmc-marketplace/site-assets/images/freedom_cal_freedom_flex_card.png",
+        "bands": [
+          {
+            "x": 7.5,
+            "y": 79,
+            "w": 30,
+            "h": 9.5,
+            "color": "#1294cc"
+          }
+        ]
+      }
+    },
+    "chase-freedom-unlimited": {
+      "match": ["Chase Freedom Unlimited"],
+      "placeholder": ["#1f4f9a", "#0e2a63"],
+      "text": "#eef3fb"
+    },
+    "chase-prime-visa": {
+      "match": ["Chase Prime Visa", "Prime Visa"],
+      "placeholder": ["#1b2d4b", "#0c1628"],
+      "text": "#eef2f8"
+    },
+    "discover-it": {
+      "match": ["Discover it"],
+      "placeholder": ["#7fc3e6", "#4f9cc8"],
+      "text": "#10283a"
+    },
+    "chase-ink-business-cash": {
+      "match": ["Chase Ink Business Cash"],
+      "placeholder": ["#7a8087", "#4a5057"],
+      "text": "#f1f3f5",
+      "name": {
+        "x": 4,
+        "y": 78.5
+      },
+      "number": {
+        "x": 4,
+        "y": 87.5
+      },
+      "art": {
+        "page": "https://creditcards.chase.com/business-credit-cards/ink/cash",
+        "image": "https://creditcards.chase.com/bcs/api/images/file/public-card-marketplace/card-art/ink-cash.png",
+        "bands": [
+          {
+            "x": 2.5,
+            "y": 76,
+            "w": 46,
+            "h": 18,
+            "color": "#5f666d"
+          }
+        ]
+      }
+    },
+    "chase-ink-business-preferred": {
+      "match": ["Chase Ink Business Preferred"],
+      "placeholder": ["#1c2846", "#0a1229"],
+      "text": "#eef1f7",
+      "name": {
+        "x": 4,
+        "y": 78.5
+      },
+      "number": {
+        "x": 4,
+        "y": 87.5
+      },
+      "art": {
+        "page": "https://creditcards.chase.com/business-credit-cards/ink/business-preferred",
+        "image": "https://creditcards.chase.com/content/dam/jpmc-marketplace/card-art/ink_preferred_card.png",
+        "bands": [
+          {
+            "x": 2.5,
+            "y": 76,
+            "w": 46,
+            "h": 18,
+            "color": "#0a132c"
+          }
+        ]
+      }
+    },
+    "chase-unidentified": {
+      "match": [],
+      "placeholder": ["#6b6f68", "#4b4f49"],
+      "text": "#f2f3ef"
+    },
+    "citi-costco-anywhere": {
+      "match": ["Citi Costco Anywhere Visa"],
+      "placeholder": ["#5f6b74", "#36414a"],
+      "text": "#f2f4f5"
+    },
+    "citi-strata": {
+      "match": ["Citi Strata"],
+      "placeholder": ["#1f2f4d", "#0d1a33"],
+      "text": "#eef2f8"
+    },
+    "citi-double-cash": {
+      "match": ["Citi Double Cash"],
+      "placeholder": ["#2a8c86", "#135f5b"],
+      "text": "#f1faf9"
+    },
+    "apple-card": {
+      "match": ["Apple Card"],
+      "placeholder": ["#f1f1f3", "#cfd0d6"],
+      "text": "#2a2a2e"
+    }
+  }
+}

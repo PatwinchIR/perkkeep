@@ -1,74 +1,66 @@
 # Perkkeep
 
-A private home for credit-card benefits. Built with Next.js App Router, TypeScript, Tailwind, Supabase Auth/Postgres, and Vercel deployment configuration.
+A private home for credit-card benefits. Built with Next.js App Router, TypeScript, Tailwind, PostgreSQL (Neon in production), Neon managed auth and Vercel.
 
 **Local preview: http://127.0.0.1:3017**. Browser tests start their own Perkkeep server and refuse to reuse an occupied port.
 
-No Plaid integration or direct ChatGPT Finances access is included. Your ledger describes the last recorded reconciliation, not a live bank balance. All historical periods, rule snapshots and evidence corrections are retained.
+Your ledger describes the last recorded reconciliation, not a live bank balance. All historical periods, rule snapshots and evidence corrections are retained.
 
-## First visit
+## Project context
 
-1. Open the local preview and choose **First visit? Create a local account**. Local Auth stores the account in the dedicated local Supabase database; no real email is sent by the local mail service.
-2. Choose **Set up my cards**. This includes Amex Gold, Chase Sapphire Reserve, Freedom Flex, Freedom Unlimited, Prime Visa, Discover it, Ink Business Cash, and Ink Business Preferred, plus an unidentified Chase record. Identities remain unverified and no benefits are assumed. All cards start without last-four digits; enter your own in card details.
-3. Open a card and confirm its product, status, issuer timezone and optional anniversary with the issuer.
-4. Add a benefit from a sourced catalog draft or your verified issuer terms. Confirm effective dates, eligibility and enrollment. A partial effective window has an unknown allowance instead of an invented prorated amount.
-5. Record candidate purchases or confirmed redemptions. Purchases cannot be marked issuer-confirmed. Review a candidate to append its confirmation or rejection. Refunds/reversals reduce usage only when entitlement reversal is explicitly verified.
-6. In Settings, record the periods and coverage of a manual reconciliation. Only eligible, monetary benefits with recent complete coverage enter **Known available**. Candidate purchases never reduce that figure.
+PerkKeep is the owner's personal credit-card benefits tracker. The goal is daily use with no manual checks of issuer portals: which benefits exist, which are enrolled, how much is used and remains, when each expires, and how reliable that information is. Transactions from SimpleFIN (Plaid as a backup, CSV for history) help match benefit use. A card recommender, a browser extension and finance chat over MCP come later, behind gates.
+
+- [Engineering brief](docs/brief.md): mission, priorities, autonomy rules, architecture, phases and gates, constraints.
+- [Status and next steps](docs/status.md): what is done, what is next, and how to work in a cloud container.
+- [Decisions](docs/decisions.md): every decision made without asking, and the assumptions verified so far.
+- [Architecture](docs/architecture.md), [deployment](docs/deployment.md), and the phase reports in [docs/reports](docs/reports/).
+
+## How data is protected
+
+- The browser never talks to the database. It calls a fixed set of server operations (`/api/ledger`). The server verifies the session, requires a verified email on the owner allowlist, and only then opens a transaction.
+- Each transaction runs as the restricted `perkkeep_app` role, which has no `BYPASSRLS` and owns nothing. The owner's identity is a transaction-local setting, and row-level security policies on every table use it.
+- The database owner role is used only for migrations. The app refuses to start on a connection that could bypass row-level security, and the Vercel build guard rejects unsafe configuration.
+
+See [architecture](docs/architecture.md), [decisions](docs/decisions.md) and the [Phase 0 report](docs/reports/phase-0.md).
 
 ## Start locally
 
-Use Node 24 LTS (see `.nvmrc`). The installed Supabase CLI is pinned in this project. A native local runtime is supported on Apple-silicon macOS 14+ and supported Linux platforms; Docker is an alternative. No cloud linking or provisioning is required.
+Use Node 24 LTS (see `.nvmrc`) and a local PostgreSQL 16 or newer server. In a Claude Code cloud container, run `bash scripts/cloud-postgres.sh` instead of the `local:postgres` line below.
 
 ```sh
 git clone https://github.com/PatwinchIR/perkkeep.git
 cd perkkeep
 npm ci
-npm run local:start
-npm run db:migrate
-npm run local:env
+PERKKEEP_LOCAL_ADMIN_URL=postgresql://postgres@127.0.0.1:5432/postgres npm run local:postgres
 npm run dev
 ```
 
-Open `http://127.0.0.1:3017`. If you need another port, update the local Auth redirect allowlist, Playwright base URL and dev/start scripts together. Local Supabase assigns its own API/database ports. `local:env` captures the actual ports and saves only the **publishable** key and API URL into `.env.local`. Test-only privileged credentials stay in ignored `.local/supabase.json` with owner-only permissions. No privileged key is needed by the app.
-
-Stop the local database with `npm run local:stop`; stop the app with Ctrl-C in its terminal. Stopping preserves data. **Do not use database reset or destroy commands on a workspace containing records you want to keep.** Apply forward migrations with `db:migrate` instead.
+`local:postgres` reproduces Neon's role model on your local server: a non-superuser owner role with `BYPASSRLS` that runs migrations, and the restricted `perkkeep_app` role that serves the app. It creates `perkkeep_local` for development and `perkkeep_test` for synthetic test owners. It never drops or resets anything. Connection details go to ignored `.local/postgres.json` and `.env.local`. Local development uses a synthetic, password-less sign-in that works only against a local database and never on Vercel.
 
 ## Verify
 
-The database tests use the **real local Supabase Auth, Data API and PostgreSQL**, not a mocked database. They run before frontend verification. Synthetic fixtures are explicitly labeled, belong to separate randomly created test accounts and are never seeded into a user's account. Tests refuse a non-local Supabase URL.
-
 ```sh
-npm run test:db
 npm test
 npm run typecheck
 npm run lint
-npm run db:advisors
-npx playwright install chromium webkit
 npm run test:e2e
 npm run build
 npm run check:client
 ```
 
-Browser tests exercise 375px Chromium, 375px WebKit and desktop Chromium with actual Auth and database writes. They include accessibility audits and verify that the service-worker cache contains only public icons and the offline page. Native iPhone installation still needs a physical-device check at the eventual HTTPS deployment.
+Database tests run as the restricted role against the local `perkkeep_test` database. Browser tests cover desktop Chromium, 375px Chromium and 375px WebKit, plus HTTP-level checks of the session, origin and ownership boundaries. All fixtures are synthetic.
 
-See [verification](docs/verification.md) for observed outcomes and [architecture](docs/architecture.md) for design decisions.
+## Hosted setup
+
+See [deployment](docs/deployment.md). In short: `npm run neon:provision -- --vercel --owner-email you@example.com` on the owner's machine applies the migrations to Neon, provisions the restricted role, and stores the server-only Vercel variables without printing them.
 
 ## Structure
 
-- `supabase/migrations/`: versioned tables, ownership policies, immutable snapshots, correction ledger, transactional reconciliation and audit triggers.
-- `src/lib/`: generated database types, date/status/coverage calculations, catalog and direct Supabase client.
-- `src/components/`: authenticated app shell, dashboard, cards, review, history, settings and forms.
-- `src/app/`: App Router pages, metadata and PWA manifest.
+- `db/migrations/`: PostgreSQL schema, ownership policies, immutable snapshots, correction ledger, transactional reconciliation, audit triggers, append-only source transactions and private card art.
+- `data/card-faces.json`: public card face layout (placeholder colors, allowlisted issuer image URLs, cover bands and text positions).
+- `src/server/`: database pool, session verification, owner access checks, the fixed ledger operations, source adapters (SimpleFIN, Plaid Sandbox, CSV) and card image normalization.
+- `src/app/api/`: ledger, session and auth routes.
+- `src/lib/`: shared types, date, status and coverage calculations, catalog and the browser API client.
+- `src/components/`: app shell, dashboard, cards, review, history, settings and forms.
 - `public/`: install icons and an offline reconnect page. No financial responses or authenticated pages are cached.
-- `tests/`: unit tests, local API/database integration tests, browser flows and accessibility checks.
-- `docs/`: milestone report, sourced catalog, reconciliation contract and deployment runbook.
-
-## Hosted release is in progress
-
-The local app currently uses Supabase. A dedicated Vercel Hobby project and Neon Free database have been provisioned for the hosted version. The Neon application connection, hosted authentication and deployment are not yet complete. The included Neon dependencies are preparation for that work, not a working hosted integration.
-
-Existing unrelated projects were not modified. No paid upgrade was enabled. The current build still requires a dedicated Supabase HTTPS URL and publishable key when running on Vercel; this guard must be replaced as part of the Neon migration.
-
-See [deployment](docs/deployment.md) and [verification](docs/verification-2026-10-28.md). Local accounts and records do not automatically migrate to the hosted project. Credentials, local database contents, financial records and browser traces are excluded from this public source repository.
-
-Finances reconciliation and scheduled tasks remain unproven. See [reconciliation](docs/reconciliation.md). No scheduled task, unattended sync, banking connection or background financial worker has been created.
+- `tests/`: unit, database and browser tests.

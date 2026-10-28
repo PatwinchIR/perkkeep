@@ -1,6 +1,8 @@
 "use client";
 import { useState, type FormEvent } from "react";
-import type { Card, Benefit, Period, Evidence, Json } from "@/lib/types";
+import type { Card, Benefit, Period, Evidence, SyncRun } from "@/lib/types";
+import { run } from "@/lib/api";
+import type { OperationInput } from "@/server/ledger";
 import { CATALOG } from "@/lib/catalog";
 import { CADENCES, localDate, parseCents, cardEnding } from "@/lib/domain";
 import { useApp } from "./provider";
@@ -35,7 +37,7 @@ export function CardForm({
   card: Card;
   onClose: () => void;
 }) {
-  const { db, refresh, notice, offline } = useApp(),
+  const { refresh, notice, offline } = useApp(),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   async function submit(e: FormEvent<HTMLFormElement>) {
@@ -44,19 +46,15 @@ export function CardForm({
     setBusy(true);
     setError("");
     try {
-      const { error } = await db
-        .from("cards")
-        .update({
-          display_name: text(f, "name"),
-          product_name: text(f, "product"),
-          last4: text(f, "last4") || null,
-          status: text(f, "status"),
-          cardmember_anchor_date: text(f, "anchor") || null,
-          issuer_timezone: text(f, "timezone"),
-          identity_verified_at: new Date().toISOString(),
-        })
-        .eq("id", card.id);
-      if (error) throw error;
+      await run("updateCard", {
+        id: card.id,
+        display_name: text(f, "name"),
+        product_name: text(f, "product") || null,
+        last4: text(f, "last4") || null,
+        status: text(f, "status") as "active" | "closed" | "unknown",
+        cardmember_anchor_date: text(f, "anchor") || null,
+        issuer_timezone: text(f, "timezone"),
+      });
       await refresh();
       notice("Card details confirmed.");
       onClose();
@@ -165,7 +163,7 @@ export function BenefitForm({
   previous?: Benefit;
   onClose: () => void;
 }) {
-  const { db, refresh, notice, offline } = useApp(),
+  const { refresh, notice, offline } = useApp(),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [template, setTemplate] = useState(""),
@@ -215,6 +213,14 @@ export function BenefitForm({
           conditions: text(f, "description"),
           source_observed_at: selected?.checkedAt ?? localDate(),
           effective_date_confirmed_by: "user",
+          // Links this benefit to the reviewed rule file (data/benefits) and the version used.
+          ...(selected
+            ? {
+                catalog_rule_id: selected.id,
+                catalog_rule_version: selected.checkedAt,
+                terms_verified: selected.verified,
+              }
+            : {}),
         },
         issuer_source_url: source.href,
         verified_at: new Date().toISOString(),
@@ -228,14 +234,14 @@ export function BenefitForm({
         throw new Error(
           "Set a valid exclusive end date for this custom window.",
         );
-      const result = previous
-        ? await db.rpc("version_benefit", {
-            p_benefit_id: previous.id,
-            p_effective_from: start,
-            p_changes: changes,
-          })
-        : await db.from("benefits").insert(changes);
-      if (result.error) throw result.error;
+      if (previous)
+        await run("versionBenefit", {
+          benefit_id: previous.id,
+          effective_from: start,
+          changes,
+        });
+      else
+        await run("createBenefit", changes as OperationInput<"createBenefit">);
       await refresh();
       notice(
         previous
@@ -280,7 +286,12 @@ export function BenefitForm({
           </select>
           {selected && (
             <small>
-              Source checked {selected.checkedAt}.{" "}
+              {selected.verified
+                ? `Read on the issuer's page on ${selected.checkedAt}.`
+                : "Terms not verified with the issuer."}{" "}
+              {selected.effectiveTo
+                ? `Ends before ${selected.effectiveTo}. `
+                : ""}
               <a href={selected.source} target="_blank" rel="noreferrer">
                 Review issuer terms ↗
               </a>
@@ -480,7 +491,7 @@ export function EvidenceForm({
   correction?: Evidence;
   onClose: () => void;
 }) {
-  const { db, refresh, notice, offline } = useApp(),
+  const { refresh, notice, offline } = useApp(),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [id] = useState(() => crypto.randomUUID()),
@@ -536,12 +547,10 @@ export function EvidenceForm({
           source === "purchase" && confidence === "confirmed"
             ? "candidate"
             : confidence,
-        recorded_by: "user",
         notes: text(f, "notes"),
         supersedes_evidence_id: correction?.id ?? null,
       };
-      const { error } = await db.rpc("record_evidence", { p_record });
-      if (error) throw error;
+      await run("recordEvidence", p_record as OperationInput<"recordEvidence">);
       await refresh();
       notice("Evidence saved. Earlier records remain in history.");
       onClose();
@@ -673,7 +682,7 @@ export function RejectForm({
   period: Period;
   onClose: () => void;
 }) {
-  const { db, refresh, notice, offline } = useApp(),
+  const { refresh, notice, offline } = useApp(),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [id] = useState(() => crypto.randomUUID());
@@ -682,22 +691,19 @@ export function RejectForm({
     const f = new FormData(e.currentTarget);
     setBusy(true);
     try {
-      const { error } = await db.rpc("record_evidence", {
-        p_record: {
-          id,
-          benefit_period_id: period.id,
-          source_type: evidence.source_type,
-          transaction_date: evidence.transaction_date,
-          amount_cents: evidence.amount_cents,
-          units: evidence.units,
-          confidence: "rejected",
-          eligibility_result: "ineligible",
-          recorded_by: "user",
-          notes: text(f, "notes"),
-          supersedes_evidence_id: evidence.id,
-        },
+      await run("recordEvidence", {
+        id,
+        benefit_period_id: period.id,
+        source_type:
+          evidence.source_type as OperationInput<"recordEvidence">["source_type"],
+        transaction_date: evidence.transaction_date,
+        amount_cents: evidence.amount_cents,
+        units: evidence.units,
+        confidence: "rejected",
+        eligibility_result: "ineligible",
+        notes: text(f, "notes"),
+        supersedes_evidence_id: evidence.id,
       });
-      if (error) throw error;
       await refresh();
       notice("Candidate rejected; original evidence preserved.");
       onClose();
@@ -730,7 +736,7 @@ export function NoteForm({
   period: Period;
   onClose: () => void;
 }) {
-  const { db, refresh, notice, offline } = useApp(),
+  const { refresh, notice, offline } = useApp(),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   async function submit(e: FormEvent<HTMLFormElement>) {
@@ -738,11 +744,7 @@ export function NoteForm({
     const f = new FormData(e.currentTarget);
     setBusy(true);
     try {
-      const { error } = await db
-        .from("benefit_periods")
-        .update({ notes: text(f, "notes") })
-        .eq("id", period.id);
-      if (error) throw error;
+      await run("setPeriodNote", { id: period.id, notes: text(f, "notes") });
       await refresh();
       notice("Note saved in the audit history.");
       onClose();
@@ -779,7 +781,7 @@ export function CoverageForm({
   periods: Period[];
   onClose: () => void;
 }) {
-  const { db, refresh, notice, offline } = useApp(),
+  const { refresh, notice, offline } = useApp(),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [coverage, setCoverage] = useState("partial"),
@@ -794,22 +796,15 @@ export function CoverageForm({
       const through = text(f, "through");
       if (through > localDate())
         throw new Error("Coverage cannot be in the future.");
-      const { data, error } = await db.rpc("apply_reconciliation", {
-        p_request_key: key,
-        p_trigger: "manual",
-        p_periods: ids.map((id) => ({
+      const data = (await run("applyReconciliation", {
+        request_key: key,
+        periods: ids.map((id) => ({
           id: String(id),
-          coverage_status: coverage,
+          coverage_status: coverage as "complete" | "partial" | "unavailable",
           coverage_through: through || null,
         })),
-        p_evidence: [],
-        p_summary: {
-          source: "user_review",
-          description: text(f, "description"),
-          finances_available: "not_tested",
-        } as Json,
-      });
-      if (error) throw error;
+        description: text(f, "description"),
+      })) as SyncRun;
       if (data.status === "failed")
         throw new Error(data.error_summary ?? "Reconciliation failed.");
       await refresh();

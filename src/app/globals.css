@@ -665,7 +665,16 @@ small {
 .card-face {
   border-radius: 10px;
   padding: 18px 19px 17px;
-  min-height: 157px;
+  aspect-ratio: 1.586;
+  container-type: inline-size;
+  background: linear-gradient(
+    125deg,
+    var(--face-a, #4a5a55),
+    var(--face-b, #2f3d39)
+  );
+  box-shadow:
+    0 1px 2px #0000001f,
+    0 6px 16px #0000001a;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -850,17 +859,17 @@ small {
 }
 .badge.candidate {
   background: #f3ead6;
-  color: #936d32;
+  color: #74541f;
 }
 .badge.needs_review,
 .badge.unknown {
   background: #efe9df;
-  color: #88734c;
+  color: #6b5631;
 }
 .badge.expired,
 .badge.rejected {
   background: #eeede9;
-  color: #777c72;
+  color: #5c6157;
 }
 .period-amounts {
   display: grid;
@@ -1140,6 +1149,24 @@ small {
 }
 .settings-card .badge {
   margin: 18px 0;
+}
+.source-linked {
+  align-self: start;
+}
+.source-linked-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.source-linked-heading h2 {
+  margin: 0;
+}
+.source-linked-heading .badge {
+  margin: 0;
+}
+.source-linked .secondary {
+  justify-self: start;
 }
 .settings-card .primary {
   display: flex;
@@ -1993,4 +2020,141 @@ dialog::backdrop {
 .welcome-foot,
 .welcome-copy p {
   color: #596650;
+}
+.sources {
+  margin-top: 34px;
+}
+.sources > .hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin: -6px 0 18px;
+}
+.sources .sync-log,
+.account-list {
+  margin-top: 20px;
+}
+.account-list {
+  display: grid;
+  gap: 10px;
+}
+.account-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--white);
+}
+.account-row strong {
+  display: block;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.account-row span,
+.account-row p {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 5px 0 0;
+}
+.account-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  min-width: 180px;
+}
+.sr-label {
+  font-size: 11px;
+  color: var(--muted);
+  display: grid;
+  gap: 4px;
+}
+@media (max-width: 720px) {
+  .account-row {
+    flex-direction: column;
+  }
+  .account-actions {
+    align-items: stretch;
+    min-width: 0;
+  }
+}
+.card-face.has-art {
+  padding: 0;
+}
+.card-face.has-art::after {
+  display: none;
+}
+.face-art,
+.face-band {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.face-art {
+  object-fit: cover;
+}
+.face-band {
+  inset: auto;
+  border-radius: 1.2cqw;
+}
+.face-text {
+  position: absolute;
+  font-family: "OCR A Std", "Courier New", monospace;
+  font-size: 5cqw;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+  white-space: nowrap;
+  text-shadow: 0 1px 1px #00000038;
+}
+.card-face .card-digits.face-text {
+  font-size: 4.6cqw;
+  opacity: 0.92;
+}
+.card-face.large {
+  max-width: 420px;
+}
+.card-art-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 420px) minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+  margin: 0 0 30px;
+}
+.card-art-panel h2 {
+  font-size: 18px;
+  margin: 0;
+}
+.card-art-panel .hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+}
+@media (max-width: 720px) {
+  .card-art-panel {
+    grid-template-columns: 1fr;
+  }
+}
+.name-on-cards {
+  margin-top: 20px;
+  max-width: 520px;
+}
+.card-face:not(.has-art) .chip {
+  position: absolute;
+  left: 7%;
+  top: 34%;
+  width: 11%;
+  height: auto;
+  aspect-ratio: 1.3;
+}
+.card-face:not(.has-art) > strong {
+  position: absolute;
+  left: 7%;
+  right: 7%;
+  top: 52%;
+  margin: 0;
+  font-size: max(15px, 5.4cqw);
+  line-height: 1.15;
 }

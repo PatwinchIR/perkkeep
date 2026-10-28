@@ -9,7 +9,5 @@ playwright-report/
 coverage/
 *.tsbuildinfo
 .DS_Store
-supabase/.temp/
-supabase/.branches/
 .agents/
 skills-lock.json

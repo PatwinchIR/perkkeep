@@ -8,19 +8,25 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { Session, SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@/lib/database.types";
 import type { Snapshot } from "@/lib/types";
-import { getSupabase, isLocal } from "@/lib/supabase";
-import { loadSnapshot } from "@/lib/data";
+import {
+  ApiError,
+  getSessionState,
+  getSnapshot,
+  testSignIn,
+  testSignOut,
+  type SessionState,
+} from "@/lib/api";
+import { authClient } from "@/lib/auth-client";
 import Link from "next/link";
 import { ArrowUpRight, Leaf, LockKeyhole, Mail } from "lucide-react";
 
 type AppContext = {
-  db: SupabaseClient<Database>;
   data: Snapshot;
-  session: Session;
+  session: { email: string; name: string | null; provider: "neon" | "test" };
+  reloadSession: () => Promise<void>;
   refresh: () => Promise<void>;
+  signOut: () => Promise<void>;
   busy: boolean;
   offline: boolean;
   notice: (text: string) => void;
@@ -32,6 +38,11 @@ export function useApp() {
   return value;
 }
 const EMPTY: Snapshot = {
+  cardArt: [],
+  accounts: [],
+  connections: [],
+  syncs: [],
+  imports: [],
   cards: [],
   benefits: [],
   periods: [],
@@ -40,14 +51,13 @@ const EMPTY: Snapshot = {
   audit: [],
   periodErrors: [],
 };
+const errorText = (e: unknown, fallback: string) =>
+  e instanceof Error ? e.message : fallback;
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [db] = useState(getSupabase),
-    [session, setSession] = useState<Session | null>(null),
-    [authReady, setAuthReady] = useState(false),
+  const [session, setSession] = useState<SessionState | null>(null),
     [data, setData] = useState<Snapshot>(EMPTY),
     [busy, setBusy] = useState(false),
     [loaded, setLoaded] = useState(false),
-    [loadedFor, setLoadedFor] = useState<string | null>(null),
     [error, setError] = useState(""),
     [toast, setToast] = useState(""),
     [offline, setOffline] = useState(false);
@@ -55,62 +65,64 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const invalidate = useCallback(() => {
     generation.current++;
   }, []);
+  const checkSession = useCallback(async () => {
+    try {
+      setSession(await getSessionState());
+    } catch (e) {
+      setError(errorText(e, "Could not reach PerkKeep."));
+      setSession({
+        state: "signed_out",
+        email: null,
+        name: null,
+        message: null,
+      });
+    }
+  }, []);
   useEffect(() => {
-    if (!db) return;
-    let mounted = true;
-    const {
-      data: { subscription },
-    } = db.auth.onAuthStateChange((_event, next) => {
-      if (mounted) {
-        setSession(next);
-        setAuthReady(true);
-      }
-    });
-    db.auth.getSession().then(({ data, error }) => {
-      if (mounted) {
-        setSession(data.session);
-        if (error) setError(error.message);
-        setAuthReady(true);
-      }
-    });
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
-  }, [db]);
-  const userId = session?.user.id;
+    const timer = setTimeout(() => void checkSession(), 0);
+    return () => clearTimeout(timer);
+  }, [checkSession]);
+  const owner = session?.state === "owner" ? session.email : null;
   const refresh = useCallback(async () => {
-    if (!db || !userId) return;
+    if (!owner) return;
     const id = ++generation.current;
     setBusy(true);
     setError("");
     try {
-      const snapshot = await loadSnapshot(db);
+      const snapshot = await getSnapshot();
       if (generation.current === id) {
         setData(snapshot);
-        setLoadedFor(userId);
         setLoaded(true);
       }
     } catch (e) {
-      if (generation.current === id)
-        setError(
-          e instanceof Error ? e.message : "Could not load your records.",
-        );
+      if (generation.current !== id) return;
+      // A revoked or expired session sends the person back to sign-in.
+      if (e instanceof ApiError && (e.status === 401 || e.status === 403))
+        await checkSession();
+      else setError(errorText(e, "Could not load your records."));
     } finally {
       if (generation.current === id) setBusy(false);
     }
-  }, [db, userId]);
+  }, [owner, checkSession]);
   useEffect(() => {
     const timer = setTimeout(() => {
       setData(EMPTY);
       setLoaded(false);
-      if (userId) void refresh();
+      if (owner) void refresh();
     }, 0);
     return () => {
       clearTimeout(timer);
       invalidate();
     };
-  }, [userId, refresh, invalidate]);
+  }, [owner, refresh, invalidate]);
+  const signOut = useCallback(async () => {
+    invalidate();
+    if (session?.provider === "test") await testSignOut();
+    else await authClient().signOut();
+    setData(EMPTY);
+    setLoaded(false);
+    await checkSession();
+  }, [session?.provider, checkSession, invalidate]);
   useEffect(() => {
     const update = () => setOffline(!navigator.onLine);
     update();
@@ -122,7 +134,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, []);
   useEffect(() => {
-    if (!userId) return;
+    if (!owner) return;
     const onFocus = () => {
       if (navigator.onLine) void refresh();
     };
@@ -132,7 +144,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("focus", onFocus);
       clearInterval(timer);
     };
-  }, [refresh, userId]);
+  }, [refresh, owner]);
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(""), 5000);
@@ -144,7 +156,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         /* Installation is optional; online records still work. */
       });
   }, []);
-  if (!db)
+  if (!session)
+    return (
+      <div className="loading-screen" role="status">
+        Opening Perkkeep…
+      </div>
+    );
+  if (session.state === "unconfigured")
     return (
       <Welcome>
         <h1>
@@ -152,23 +170,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
           <br />a lot to keep.
         </h1>
         <p>
-          Perkkeep needs its own Supabase connection before you can sign in. The
-          setup guide in this project explains how to connect it.
+          Perkkeep needs its database and sign-in settings before you can sign
+          in. The deployment guide in this project explains how to connect them.
         </p>
-        <div className="notice">
-          No financial records are loaded. Your existing projects have not been
-          connected.
-        </div>
+        <div className="notice">No financial records are loaded.</div>
       </Welcome>
     );
-  if (!authReady)
+  if (session.state === "email_unverified" && session.email)
     return (
-      <div className="loading-screen" role="status">
-        Opening Perkkeep…
-      </div>
+      <VerifyEmail
+        email={session.email}
+        onDone={checkSession}
+        onSignOut={signOut}
+      />
     );
-  if (!session) return <Login db={db} />;
-  if (!loaded || loadedFor !== userId)
+  if (session.state === "not_owner")
+    return (
+      <Welcome>
+        <h1>This workspace is private.</h1>
+        <p>{session.message}</p>
+        <button className="secondary full-width" onClick={() => void signOut()}>
+          Sign out
+        </button>
+      </Welcome>
+    );
+  if (session.state !== "owner" || !session.email)
+    return (
+      <Login
+        provider={session.provider ?? "neon"}
+        expired={session.state === "expired"}
+        onSignedIn={checkSession}
+      />
+    );
+  if (!loaded)
     return (
       <div className="loading-screen">
         <Leaf size={32} />
@@ -183,14 +217,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ) : (
           <p role="status">Loading your private ledger…</p>
         )}
-        <button className="text-button" onClick={() => void db.auth.signOut()}>
+        <button className="text-button" onClick={() => void signOut()}>
           Sign out
         </button>
       </div>
     );
   return (
     <Context.Provider
-      value={{ db, data, session, refresh, busy, offline, notice: setToast }}
+      value={{
+        data,
+        session: {
+          email: session.email,
+          name: session.name,
+          provider: session.provider ?? "neon",
+        },
+        reloadSession: checkSession,
+        refresh,
+        signOut,
+        busy,
+        offline,
+        notice: setToast,
+      }}
     >
       {offline && (
         <div className="global-banner" role="status">
@@ -251,55 +298,107 @@ function Welcome({ children }: { children: ReactNode }) {
     </main>
   );
 }
-function Login({ db }: { db: SupabaseClient<Database> }) {
+type AuthResult = { error?: { message?: string; code?: string } | null };
+function authError(result: AuthResult) {
+  if (result.error)
+    throw Object.assign(new Error(result.error.message ?? "Sign-in failed."), {
+      code: result.error.code,
+    });
+}
+function Login({
+  provider,
+  expired,
+  onSignedIn,
+}: {
+  provider: "neon" | "test";
+  expired: boolean;
+  onSignedIn: () => Promise<void>;
+}) {
   const [email, setEmail] = useState(""),
+    [name, setName] = useState(""),
     [password, setPassword] = useState(""),
     [loading, setLoading] = useState(false),
     [error, setError] = useState(""),
     [message, setMessage] = useState(""),
-    [create, setCreate] = useState(false);
+    [create, setCreate] = useState(false),
+    [verifying, setVerifying] = useState(false);
+  const local = provider === "test";
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setLoading(true);
     setError("");
     try {
-      const result = create
-        ? await db.auth.signUp({ email, password })
-        : await db.auth.signInWithPassword({ email, password });
-      if (result.error) throw result.error;
-      if (!result.data.session)
-        setMessage("Check your email to finish signing in.");
+      if (local) await testSignIn(email);
+      else if (create) {
+        authError(
+          await authClient().signUp.email({
+            email,
+            password,
+            name: name.trim(),
+          }),
+        );
+        // Neon Auth issues no session until the email is verified, so ask for the code now.
+        setVerifying(true);
+        return;
+      } else authError(await authClient().signIn.email({ email, password }));
+      await onSignedIn();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Sign-in failed.");
+      if ((e as { code?: string }).code === "EMAIL_NOT_VERIFIED") {
+        setVerifying(true);
+        return;
+      }
+      setError(errorText(e, "Sign-in failed."));
     } finally {
       setLoading(false);
     }
   }
-  async function magicLink() {
+  if (verifying)
+    return (
+      <VerifyEmail
+        email={email}
+        backLabel="Back to sign in"
+        onDone={async () => {
+          if (password)
+            authError(await authClient().signIn.email({ email, password }));
+          await onSignedIn();
+        }}
+        onSignOut={async () => setVerifying(false)}
+      />
+    );
+  async function emailCode() {
     if (!email) {
       setError("Enter your email address first.");
       return;
     }
     setLoading(true);
-    const { error } = await db.auth.signInWithOtp({
-      email,
-      options: {
-        shouldCreateUser: false,
-        emailRedirectTo: window.location.origin,
-      },
-    });
-    setLoading(false);
-    if (error) setError(error.message);
-    else setMessage("Check your email for a secure sign-in link.");
+    setError("");
+    try {
+      authError(
+        await authClient().emailOtp.sendVerificationOtp({
+          email,
+          type: "sign-in",
+        }),
+      );
+      setMessage("Check your email for a one-time sign-in code.");
+    } catch (e) {
+      setError(errorText(e, "Could not send a code."));
+    } finally {
+      setLoading(false);
+    }
   }
   return (
     <Welcome>
       <span className="eyebrow">YOUR BENEFITS, TOGETHER</span>
       <h1>{create ? "Make yourself at home." : "Welcome back."}</h1>
       <p>Sign in to your personal benefits ledger.</p>
-      {isLocal() && (
+      {expired && (
+        <p className="notice" role="status">
+          Your session ended. Sign in again to continue.
+        </p>
+      )}
+      {local && (
         <div className="local-label">
-          Local workspace · data stays on this computer
+          Local synthetic sign-in · no password, local database only
         </div>
       )}
       <form onSubmit={submit} className="form-stack">
@@ -314,15 +413,137 @@ function Login({ db }: { db: SupabaseClient<Database> }) {
             placeholder="you@example.com"
           />
         </label>
+        {!local && create && (
+          <label>
+            Your name, as printed on your cards
+            <input
+              autoComplete="name"
+              required
+              maxLength={60}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </label>
+        )}
+        {!local && (
+          <label>
+            Password
+            <input
+              type="password"
+              autoComplete={create ? "new-password" : "current-password"}
+              required
+              minLength={8}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </label>
+        )}
+        {error && (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        )}
+        {message && (
+          <p className="notice" role="status">
+            {message}
+          </p>
+        )}
+        <button className="primary" disabled={loading}>
+          {loading ? "One moment…" : create ? "Create account" : "Sign in"}
+          <ArrowUpRight size={17} />
+        </button>
+      </form>
+      {!local && (
+        <>
+          <button
+            className="secondary full-width"
+            disabled={loading}
+            onClick={() => void emailCode()}
+          >
+            <Mail size={16} /> Email me a sign-in code
+          </button>
+          <button
+            className="text-button"
+            onClick={() => {
+              setCreate(!create);
+              setError("");
+            }}
+          >
+            {create
+              ? "Already have an account? Sign in"
+              : "First visit? Create your account"}
+          </button>
+        </>
+      )}
+      <p className="fine-print">
+        <LockKeyhole size={14} /> Your ledger is private. Only the owner can
+        access its records.
+      </p>
+    </Welcome>
+  );
+}
+function VerifyEmail({
+  email,
+  onDone,
+  onSignOut,
+  backLabel = "Sign out",
+}: {
+  email: string;
+  onDone: () => Promise<void>;
+  onSignOut: () => Promise<void>;
+  backLabel?: string;
+}) {
+  const [otp, setOtp] = useState(""),
+    [loading, setLoading] = useState(false),
+    [error, setError] = useState(""),
+    [message, setMessage] = useState("");
+  async function send() {
+    setLoading(true);
+    setError("");
+    try {
+      authError(
+        await authClient().emailOtp.sendVerificationOtp({
+          email,
+          type: "email-verification",
+        }),
+      );
+      setMessage("A verification code is on its way.");
+    } catch (e) {
+      setError(errorText(e, "Could not send a code."));
+    } finally {
+      setLoading(false);
+    }
+  }
+  async function verify(event: React.FormEvent) {
+    event.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      authError(await authClient().emailOtp.verifyEmail({ email, otp }));
+      await onDone();
+    } catch (e) {
+      setError(errorText(e, "That code did not work."));
+    } finally {
+      setLoading(false);
+    }
+  }
+  return (
+    <Welcome>
+      <span className="eyebrow">ONE MORE STEP</span>
+      <h1>Verify your email.</h1>
+      <p>
+        PerkKeep opens only for a verified email address. Enter the code sent to{" "}
+        {email}, or follow the link in that email and then reload this page.
+      </p>
+      <form onSubmit={verify} className="form-stack">
         <label>
-          Password
+          Verification code
           <input
-            type="password"
-            autoComplete={create ? "new-password" : "current-password"}
+            inputMode="numeric"
+            autoComplete="one-time-code"
             required
-            minLength={8}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            value={otp}
+            onChange={(e) => setOtp(e.target.value.trim())}
           />
         </label>
         {error && (
@@ -336,38 +557,19 @@ function Login({ db }: { db: SupabaseClient<Database> }) {
           </p>
         )}
         <button className="primary" disabled={loading}>
-          {loading
-            ? "One moment…"
-            : create
-              ? "Create local account"
-              : "Sign in"}
-          <ArrowUpRight size={17} />
+          Verify and continue
         </button>
       </form>
       <button
         className="secondary full-width"
         disabled={loading}
-        onClick={() => void magicLink()}
+        onClick={() => void send()}
       >
-        <Mail size={16} /> Email me a sign-in link
+        <Mail size={16} /> Send a new code
       </button>
-      {isLocal() && (
-        <button
-          className="text-button"
-          onClick={() => {
-            setCreate(!create);
-            setError("");
-          }}
-        >
-          {create
-            ? "Already have an account? Sign in"
-            : "First visit? Create a local account"}
-        </button>
-      )}
-      <p className="fine-print">
-        <LockKeyhole size={14} /> Your ledger is private. Only you can access
-        your records.
-      </p>
+      <button className="text-button" onClick={() => void onSignOut()}>
+        {backLabel}
+      </button>
     </Welcome>
   );
 }

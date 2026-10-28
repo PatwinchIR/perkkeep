@@ -1,4 +1,4 @@
-import type { Benefit, Period } from "./types";
+import type { Account, Benefit, Period } from "./types";
 export const CADENCES = {
   monthly: "Monthly",
   quarterly: "Quarterly",
@@ -155,4 +155,17 @@ export function sortReview(a: Period, b: Period): number {
 
 export function cardEnding(last4: string | null): string {
   return last4 ? `•••• ${last4}` : "Last four not set";
+}
+
+// SimpleFIN refreshes about once a day; two days without a successful sync is stale.
+export function accountFreshness(
+  a: Pick<Account, "last_success_at" | "last_error" | "source">,
+  now = new Date(),
+): "current" | "stale" | "failing" | "never" {
+  if (a.last_error) return "failing";
+  if (!a.last_success_at) return "never";
+  if (a.source === "csv") return "current";
+  return now.getTime() - Date.parse(a.last_success_at) > 48 * 3600 * 1000
+    ? "stale"
+    : "current";
 }

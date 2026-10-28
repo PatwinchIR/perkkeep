@@ -15,9 +15,14 @@ import {
   WalletCards,
 } from "lucide-react";
 import { useApp } from "./provider";
+import { run, runSource } from "@/lib/api";
+import { RULE_FILES } from "@/lib/catalog";
 import { CardTile, Empty, PageHeading } from "./ui";
 import { PeriodPanel } from "./period-panel";
 import { BenefitForm, CardForm, CoverageForm } from "./forms";
+import { SourcesPanel } from "./sources";
+import { CardArtPanel } from "./card-art";
+import { authClient } from "@/lib/auth-client";
 import {
   activePeriod,
   cardEnding,
@@ -33,7 +38,7 @@ import {
 import type { Benefit } from "@/lib/types";
 
 export function Dashboard() {
-  const { data, db, refresh, notice, offline } = useApp(),
+  const { data, refresh, notice, offline } = useApp(),
     [issuer, setIssuer] = useState("all"),
     [cardFilter, setCardFilter] = useState("all"),
     [cadence, setCadence] = useState("all"),
@@ -84,13 +89,14 @@ export function Dashboard() {
   );
   async function setup() {
     setBusy(true);
-    const { error } = await db.rpc("initialize_cards");
-    if (error) setError(error.message);
-    else {
+    try {
+      await run("initializeCards", {});
       await refresh();
       notice(
         "Your cards are added. Confirm their current identities before adding benefits.",
       );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not add cards.");
     }
     setBusy(false);
   }
@@ -347,7 +353,7 @@ export function CardsScreen() {
 }
 
 export function CardScreen({ id }: { id: string }) {
-  const { data, db, refresh, notice, offline } = useApp(),
+  const { data, refresh, notice, offline } = useApp(),
     [modal, setModal] = useState<"card" | "benefit" | null>(null),
     [previous, setPrevious] = useState<Benefit | undefined>(),
     [error, setError] = useState(""),
@@ -371,32 +377,63 @@ export function CardScreen({ id }: { id: string }) {
           benefits.find((b) => b.id === p.benefit_id),
         ),
     );
+  const researched = RULE_FILES.find(
+      (f) => f.researched && f.catalog_key === card.catalog_key,
+    ),
+    missing = (researched?.rules ?? []).filter(
+      (r) =>
+        !benefits.some(
+          (b) =>
+            (b.eligibility_rules_json as { catalog_rule_id?: string })
+              ?.catalog_rule_id === r.id,
+        ),
+    );
+  async function addResearched() {
+    setBusy(true);
+    setError("");
+    try {
+      const r = (await run("addResearchedBenefits", { card_id: id })) as {
+        added: string[];
+        skipped: string[];
+      };
+      await runSource("runMatchers", {});
+      await refresh();
+      notice(
+        `${r.added.length} researched ${r.added.length === 1 ? "benefit" : "benefits"} added and matched against your transactions.` +
+          (r.skipped.length
+            ? ` Not added (needs your dates or has ended): ${r.skipped.join(", ")}.`
+            : ""),
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not add benefits.");
+    }
+    setBusy(false);
+  }
   async function historical(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
     setError("");
     const f = new FormData(e.currentTarget);
-    const { error } = await db.rpc("ensure_period", {
-      p_benefit_id: String(f.get("benefit")),
-      p_on: String(f.get("day")),
-    });
-    if (error) setError(error.message);
-    else {
+    try {
+      await run("ensurePeriod", {
+        benefit_id: String(f.get("benefit")),
+        on: String(f.get("day")),
+      });
       await refresh();
       notice("Period preserved. Open History to see earlier periods.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save.");
     }
     setBusy(false);
   }
   async function pause(b: Benefit) {
     setBusy(true);
-    const { error } = await db
-      .from("benefits")
-      .update({ enabled: !b.enabled })
-      .eq("id", b.id);
-    if (error) setError(error.message);
-    else {
+    try {
+      await run("setBenefitEnabled", { id: b.id, enabled: !b.enabled });
       await refresh();
       notice(b.enabled ? "Rule paused; history retained." : "Rule enabled.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save.");
     }
     setBusy(false);
   }
@@ -425,6 +462,7 @@ export function CardScreen({ id }: { id: string }) {
           </button>
         }
       />
+      <CardArtPanel card={card} />
       {!card.identity_verified_at && (
         <div className="notice">
           <strong>First, make sure this is the right card.</strong>
@@ -449,6 +487,28 @@ export function CardScreen({ id }: { id: string }) {
           <Plus size={16} /> Add benefit
         </button>
       </div>
+      {card.identity_verified_at &&
+        card.status === "active" &&
+        missing.length > 0 && (
+          <div className="notice">
+            <strong>
+              {missing.length} researched{" "}
+              {missing.length === 1 ? "benefit" : "benefits"} for this card
+            </strong>
+            <p>
+              Read on {card.issuer}&rsquo;s own pages:{" "}
+              {missing.map((r) => r.name).join(", ")}. Enrollment stays unknown
+              until you confirm it.
+            </p>
+            <button
+              className="secondary"
+              disabled={busy || offline}
+              onClick={() => void addResearched()}
+            >
+              {busy ? "Adding…" : "Add researched benefits"}
+            </button>
+          </div>
+        )}
       {benefits.length === 0 ? (
         <Empty title="A clean start for this card.">
           Add a benefit using current issuer terms. Nothing is assumed from the
@@ -806,13 +866,15 @@ export function HistoryScreen() {
 }
 
 export function SettingsScreen() {
-  const { db, data, notice } = useApp(),
+  const { data, signOut } = useApp(),
     [coverage, setCoverage] = useState(false),
     [error, setError] = useState("");
   async function signout() {
-    const { error } = await db.auth.signOut();
-    if (error) setError(error.message);
-    else notice("Signed out.");
+    try {
+      await signOut();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not sign out.");
+    }
   }
   return (
     <>
@@ -828,9 +890,9 @@ export function SettingsScreen() {
           </span>
           <h2>Your data, your call.</h2>
           <p>
-            Perkkeep reads your private Supabase ledger. Bank transactions are
-            not fetched by this app. ChatGPT Finances access and scheduled
-            reconciliation have not been verified.
+            Perkkeep reads your private ledger on the server, under your
+            verified sign-in. Connected accounts sync once a day; transactions
+            are evidence for review and never change a balance on their own.
           </p>
           <span className="badge needs_review">Manual reconciliation</span>
           <button
@@ -861,6 +923,8 @@ export function SettingsScreen() {
           </p>
         </section>
       </div>
+      <NameOnCards />
+      <SourcesPanel />
       <div className="section-heading">
         <h2>Reconciliation log</h2>
       </div>
@@ -919,5 +983,52 @@ export function SettingsScreen() {
         />
       )}
     </>
+  );
+}
+
+// The card overlay name comes from the owner's sign-in profile, never from source code.
+function NameOnCards() {
+  const { session, reloadSession, notice, offline } = useApp(),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
+  if (session.provider !== "neon") return null;
+  async function save(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const name = String(new FormData(e.currentTarget).get("name") ?? "").trim();
+    setBusy(true);
+    setError("");
+    try {
+      const { error } = await authClient().updateUser({ name });
+      if (error) throw new Error(error.message ?? "Could not save your name.");
+      await reloadSession();
+      notice("Name on cards updated.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save your name.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <form className="settings-card form-stack name-on-cards" onSubmit={save}>
+      <h2>Name on your cards</h2>
+      <label>
+        Name
+        <input
+          name="name"
+          required
+          maxLength={60}
+          defaultValue={session.name ?? ""}
+          autoComplete="name"
+        />
+      </label>
+      {error && (
+        <p role="alert" className="form-error">
+          {error}
+        </p>
+      )}
+      <button className="secondary" disabled={busy || offline}>
+        Save name
+      </button>
+    </form>
   );
 }

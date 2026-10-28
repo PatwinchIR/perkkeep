@@ -1,12 +1,23 @@
 import { test, expect, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
-import { fixture, ok, user } from "../helpers";
+import {
+  ensurePeriod,
+  env,
+  fixture,
+  recordEvidence,
+  user as syntheticUser,
+} from "../helpers";
 import { localDate } from "../../src/lib/domain";
+// Synthetic owners on the local test allowlist; each test gets a fresh owner identity.
+const OWNER_EMAIL = "owner@perkkeep.test";
+const user = () => syntheticUser(OWNER_EMAIL);
 async function login(page: Page, owner: Awaited<ReturnType<typeof user>>) {
+  const response = await page.request.post("/api/test-auth", {
+    headers: { "x-perkkeep-test-secret": env.TEST_AUTH_SECRET },
+    data: { email: owner.email, subject: owner.subject },
+  });
+  expect(response.ok()).toBe(true);
   await page.goto("/");
-  await page.getByLabel("Email address").fill(owner.email);
-  await page.getByLabel("Password", { exact: true }).fill(owner.password);
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Good things, kept in view." }),
   ).toBeVisible();
@@ -65,12 +76,9 @@ test("creates the nine-card collection, verifies identity and adds a rule throug
     page.getByText("Coverage unavailable", { exact: false }),
   ).toBeVisible();
   await noOverflow(page);
-  const saved = ok(
-    await owner.client
-      .from("benefits")
-      .select()
-      .eq("name", "Synthetic browser-test benefit"),
-  );
+  const saved = await owner.q("select * from public.benefits where name=$1", [
+    "Synthetic browser-test benefit",
+  ]);
   expect(saved).toHaveLength(1);
 });
 
@@ -78,7 +86,7 @@ test("records, corrects and rejects evidence with actual persistence and preserv
   page,
 }) => {
   const owner = await user(),
-    { card, period } = await fixture(owner.client, "monthly", {}, localDate());
+    { card, period } = await fixture(owner, "monthly", {}, localDate());
   await login(page, owner);
   await page.goto(`/cards/${card.id}`);
   await page
@@ -95,20 +103,16 @@ test("records, corrects and rejects evidence with actual persistence and preserv
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.reload();
   await expect(page.locator(".period-amounts")).toContainText("$3");
-  const candidate = ok(
-    await owner.client.rpc("record_evidence", {
-      p_record: {
-        benefit_period_id: period.id,
-        source_type: "purchase",
-        transaction_date: period.period_start,
-        amount_cents: 400,
-        confidence: "candidate",
-        eligibility_result: "eligible",
-        recorded_by: "import",
-        notes: "Synthetic imported candidate",
-      },
-    }),
-  );
+  const candidate = await recordEvidence(owner, {
+    benefit_period_id: period.id,
+    source_type: "purchase",
+    transaction_date: period.period_start,
+    amount_cents: 400,
+    confidence: "candidate",
+    eligibility_result: "eligible",
+    recorded_by: "import",
+    notes: "Synthetic imported candidate",
+  });
   await page.getByRole("button", { name: "Refresh records" }).click();
   await page.getByRole("button", { name: /Evidence \(/ }).click();
   await page.getByRole("button", { name: "Review candidate" }).click();
@@ -121,27 +125,23 @@ test("records, corrects and rejects evidence with actual persistence and preserv
   await page.getByRole("button", { name: "Save correction" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.locator(".period-amounts")).toContainText("$7");
-  const rows = ok(
-    await owner.client
-      .from("redemption_evidence")
-      .select()
-      .eq("benefit_period_id", period.id),
+  const rows = await owner.q(
+    "select * from public.redemption_evidence where benefit_period_id=$1",
+    [period.id],
   );
   expect(rows).toHaveLength(3);
   expect(
-    rows.find((e) => e.supersedes_evidence_id === candidate.id).confidence,
+    rows.find((e) => e.supersedes_evidence_id === candidate.id)?.confidence,
   ).toBe("confirmed");
-  await owner.client.rpc("record_evidence", {
-    p_record: {
-      id: randomUUID(),
-      benefit_period_id: period.id,
-      source_type: "purchase",
-      transaction_date: period.period_start,
-      amount_cents: 100,
-      confidence: "candidate",
-      eligibility_result: "eligible",
-      recorded_by: "import",
-    },
+  await recordEvidence(owner, {
+    id: randomUUID(),
+    benefit_period_id: period.id,
+    source_type: "purchase",
+    transaction_date: period.period_start,
+    amount_cents: 100,
+    confidence: "candidate",
+    eligibility_result: "eligible",
+    recorded_by: "import",
   });
   await page.getByRole("button", { name: "Refresh records" }).click();
   await page.getByRole("button", { name: "Reject candidate" }).click();
@@ -170,18 +170,14 @@ test("records explicit coverage, shows honest totals, and keeps old periods acro
   page,
 }) => {
   const owner = await user(),
-    { period, benefit } = await fixture(
-      owner.client,
-      "monthly",
-      {},
-      localDate(),
-    );
-  await owner.client.rpc("ensure_period", {
-    p_benefit_id: benefit.id,
-    p_on: new Date(new Date().getFullYear(), new Date().getMonth() - 1, 15, 12)
+    { period, benefit } = await fixture(owner, "monthly", {}, localDate());
+  await ensurePeriod(
+    owner,
+    benefit.id,
+    new Date(new Date().getFullYear(), new Date().getMonth() - 1, 15, 12)
       .toISOString()
       .slice(0, 10),
-  });
+  );
   await login(page, owner);
   await expect(page.locator(".summary-value")).toHaveText("—");
   await page.goto("/settings");
@@ -211,7 +207,9 @@ test("records explicit coverage, shows honest totals, and keeps old periods acro
   await page.reload();
   await expect(page.locator(".period-panel")).toHaveCount(2);
   expect(
-    ok(await owner.client.from("benefit_periods").select().eq("id", period.id)),
+    await owner.q("select * from public.benefit_periods where id=$1", [
+      period.id,
+    ]),
   ).toHaveLength(1);
 });
 
@@ -221,7 +219,7 @@ test("isolates sessions on sign-out and has an installable manifest with a priva
   request,
 }, testInfo) => {
   const owner = await user();
-  await owner.client.rpc("initialize_cards");
+  await owner.q("select public.initialize_cards()");
   await login(page, owner);
   await page.screenshot({
     path: `.local/${testInfo.project.name}-overview.png`,
@@ -252,8 +250,10 @@ test("isolates sessions on sign-out and has an installable manifest with a priva
   await expect(
     page.getByRole("heading", { name: "Welcome back." }),
   ).toBeVisible();
-  const other = await user();
-  await login(page, other);
+  // A different person signs in through the local sign-in form and sees an empty ledger.
+  await page.goto("/");
+  await page.getByLabel("Email address").fill("owner2@perkkeep.test");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByText("Let’s get your cards together.")).toBeVisible();
   await expect(page.locator(".card-tile")).toHaveCount(0);
   if (testInfo.project.name.startsWith("chromium")) {
@@ -270,7 +270,7 @@ test("has accessible login, overview, and card review screens", async ({
 }) => {
   const { default: AxeBuilder } = await import("@axe-core/playwright");
   const owner = await user();
-  await owner.client.rpc("initialize_cards");
+  await owner.q("select public.initialize_cards()");
   await page.goto("/");
   let audit = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
@@ -312,7 +312,7 @@ test("shows both Ink cards without invented digits and saves last-four edits", a
   page,
 }) => {
   const owner = await user();
-  await owner.client.rpc("initialize_cards");
+  await owner.q("select public.initialize_cards()");
   await login(page, owner);
   await expect(
     page.getByRole("link").filter({ hasText: "Ink Business Cash" }),
@@ -331,12 +331,161 @@ test("shows both Ink cards without invented digits and saves last-four edits", a
   await page.reload();
   await expect(page.locator(".page-heading .eyebrow")).toContainText("0555");
   expect(
-    ok(
-      await owner.client
-        .from("cards")
-        .select()
-        .eq("product_name", "Chase Ink Business Cash"),
+    (
+      await owner.q("select * from public.cards where product_name=$1", [
+        "Chase Ink Business Cash",
+      ])
     ).map((c) => c.last4),
   ).toEqual(["0555"]);
+  await noOverflow(page);
+});
+
+test("imports a synthetic statement CSV, shows its coverage, and links the account to a card", async ({
+  page,
+}) => {
+  const owner = await user();
+  await owner.q("select public.initialize_cards()");
+  await login(page, owner);
+  await page.goto("/settings");
+  await page.getByLabel("CSV file").setInputFiles({
+    name: "synthetic-statement.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(
+      "Trans. Date,Post Date,Description,Amount,Category\n10/01/2026,10/02/2026,SYNTHETIC STORE,5.00,Shopping\n10/04/2026,10/05/2026,SYNTHETIC CAFE,3.25,Dining\n",
+    ),
+  });
+  await page.getByLabel("Institution").fill("Discover");
+  await page.getByLabel("Account name").fill("Synthetic Discover export");
+  await page.getByRole("button", { name: "Import file" }).click();
+  const row = page
+    .locator(".account-row")
+    .filter({ hasText: "Synthetic Discover export" });
+  await expect(row).toContainText("covers Oct 1, 2026 – Oct 4, 2026");
+  await expect(row).toContainText("2 transaction records");
+  await row
+    .getByLabel("Card for Synthetic Discover export")
+    .selectOption({ label: "Discover it · Last four not set" });
+  await row.getByRole("button", { name: "Link card" }).click();
+  await expect(row).toContainText("Linked to Discover it");
+  const { default: AxeBuilder } = await import("@axe-core/playwright");
+  const audit = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+    .analyze();
+  expect(
+    audit.violations.map((v) => ({
+      id: v.id,
+      nodes: v.nodes.map((n) => n.target),
+    })),
+  ).toEqual([]);
+  await noOverflow(page);
+  const [account] = await owner.q("select mapping_status from public.accounts");
+  expect(account.mapping_status).toBe("confirmed");
+});
+
+test("uploads private card art, serves it uncached to its owner only, and keeps the unidentified card plain", async ({
+  page,
+  playwright,
+}) => {
+  const { default: sharp } = await import("sharp");
+  const owner = await user();
+  await owner.q("select public.initialize_cards()");
+  await login(page, owner);
+  const [card] = await owner.q(
+    "select id from public.cards where catalog_key='discover-it'",
+  );
+  await page.goto(`/cards/${card.id}`);
+  await page
+    .getByLabel("Draw my name and last four on uploaded images")
+    .check();
+  await page
+    .getByLabel("Upload an image or a photo of your card")
+    .setInputFiles({
+      name: "synthetic-card.png",
+      mimeType: "image/png",
+      buffer: await sharp({
+        create: { width: 640, height: 400, channels: 3, background: "#3c7fb0" },
+      })
+        .png()
+        .toBuffer(),
+    });
+  const art = page.locator(".card-art-panel img.face-art");
+  await expect(art).toBeVisible();
+  const src = (await art.getAttribute("src"))!;
+  const response = await page.request.get(src);
+  expect(response.status()).toBe(200);
+  expect(response.headers()["content-type"]).toBe("image/webp");
+  expect(response.headers()["cache-control"]).toBe("private, no-store");
+  const stranger = await playwright.request.newContext({
+    baseURL: "http://127.0.0.1:3017",
+  });
+  await stranger.post("/api/test-auth", {
+    headers: { "x-perkkeep-test-secret": env.TEST_AUTH_SECRET },
+    data: { email: "owner2@perkkeep.test" },
+  });
+  expect((await stranger.get(src)).status()).toBe(404);
+  expect(
+    (
+      await playwright.request
+        .newContext({ baseURL: "http://127.0.0.1:3017" })
+        .then((c) => c.get(src))
+    ).status(),
+  ).toBe(401);
+  const [unidentified] = await owner.q(
+    "select id from public.cards where catalog_key='chase-unidentified'",
+  );
+  await page.goto(`/cards/${unidentified.id}`);
+  await expect(
+    page.getByText(
+      "This card keeps a plain face until its product is confirmed.",
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Use the issuer’s image" }),
+  ).toHaveCount(0);
+  await page.goto(`/cards/${card.id}`);
+  await page.getByRole("button", { name: "Remove image" }).click();
+  await expect(page.locator(".card-art-panel img.face-art")).toHaveCount(0);
+  await noOverflow(page);
+});
+
+test("shows a linked SimpleFIN connection without the token box, and hides unused starter cards", async ({
+  page,
+}) => {
+  const owner = await user();
+  await owner.q("select public.initialize_cards()");
+  // Synthetic connection and account; the secret is a placeholder that is never decrypted here.
+  const [connection] = await owner.q(
+    "insert into public.source_connections(source,encrypted_secret,last_success_at) values('simplefin','v1.synthetic',now()) returning id",
+  );
+  const [card] = await owner.q(
+    "update public.cards set last4='4242', status='active', identity_verified_at=now() where catalog_key='chase-sapphire-reserve' returning id",
+  );
+  await owner.q(
+    `insert into public.accounts(source,connection_id,external_ref,institution,name,mask,kind,card_id,proposed_card_id,mapping_status,mapping_confirmed_at)
+     values('simplefin',$1,$2,'Synthetic Chase','Synthetic Sapphire ...4242','4242','credit',$3,$3,'confirmed',now())`,
+    [connection.id, "a".repeat(64), card.id],
+  );
+  await login(page, owner);
+  await expect(page.locator(".card-tile")).toHaveCount(1);
+  await page.goto("/settings");
+  await expect(page.getByRole("heading", { name: "SimpleFIN" })).toBeVisible();
+  await expect(page.locator(".badge", { hasText: "Linked" })).toBeVisible();
+  await expect(page.getByLabel("SimpleFIN setup token")).toHaveCount(0);
+  const row = page
+    .locator(".account-row")
+    .filter({ hasText: "Synthetic Sapphire" });
+  await expect(row).toContainText("Linked to Sapphire Reserve · •••• 4242");
+  await page
+    .getByRole("button", { name: "Replace with a new setup token" })
+    .click();
+  await expect(page.getByLabel("SimpleFIN setup token")).toBeVisible();
+  await page
+    .getByRole("button", { name: "Keep the current connection" })
+    .click();
+  await expect(page.getByLabel("SimpleFIN setup token")).toHaveCount(0);
+  await page.screenshot({
+    path: "test-results/settings-linked.png",
+    fullPage: true,
+  });
   await noOverflow(page);
 });
