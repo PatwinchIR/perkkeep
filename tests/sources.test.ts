@@ -169,10 +169,15 @@ describe("SimpleFIN adapter (documented format, synthetic payloads)", () => {
     );
     expect(() => decryptSecret(sealed, "source_connection:b")).toThrow();
   });
-  it("starts with 90 days and then overlaps the last success by two weeks", () => {
+  it("never requests more than SimpleFIN's 90-day window and overlaps the last success by two weeks", () => {
     const now = new Date("2026-10-28T15:00:00Z");
     expect(syncWindow(null, now)).toEqual({
-      start: "2026-07-30",
+      start: "2026-07-31",
+      endExclusive: "2026-10-29",
+    });
+    // A long outage still asks for at most 90 days.
+    expect(syncWindow("2026-01-01T15:00:00Z", now)).toEqual({
+      start: "2026-07-31",
       endExclusive: "2026-10-29",
     });
     expect(syncWindow("2026-10-27T15:00:00Z", now)).toEqual({
@@ -401,6 +406,30 @@ describe("sync and import ledger behavior (synthetic owner, restricted role)", (
         )
       ).status,
     ).toBe("error");
+  });
+
+  it("refuses a second manual sync within 30 minutes to protect SimpleFIN's daily quota", async () => {
+    const connection = await connect();
+    let calls = 0;
+    const adapters = fake(() => {
+      calls++;
+      return batch;
+    });
+    await runSourceOperation(
+      owner.id,
+      "syncConnection",
+      { connection_id: connection },
+      adapters,
+    );
+    await expect(
+      runSourceOperation(
+        owner.id,
+        "syncConnection",
+        { connection_id: connection },
+        adapters,
+      ),
+    ).rejects.toThrow(/about 24 requests a day/);
+    expect(calls).toBe(1);
   });
 
   it("confirms a proposed mapping only for the owner's own card", async () => {

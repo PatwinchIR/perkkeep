@@ -8,6 +8,7 @@ import { parseStatement } from "./csv";
 import {
   defaultAdapters,
   secretLabel,
+  SyncCooldownError,
   syncConnection,
   type Adapters,
 } from "./sync";
@@ -81,7 +82,17 @@ export async function runSourceOperation(
     }
     case "syncConnection": {
       const i = parsed.data as SourceOperationInput<"syncConnection">;
-      return syncConnection(ownerId, i.connection_id, "manual", adapters);
+      try {
+        return await syncConnection(
+          ownerId,
+          i.connection_id,
+          "manual",
+          adapters,
+        );
+      } catch (e) {
+        if (e instanceof SyncCooldownError) throw new InputError(e.message);
+        throw e;
+      }
     }
     case "importCsv": {
       const i = parsed.data as SourceOperationInput<"importCsv">;

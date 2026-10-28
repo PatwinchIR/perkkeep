@@ -14,20 +14,28 @@ export const defaultAdapters = (): Adapters => ({
 const TZ = "America/New_York";
 // SimpleFIN Bridge refreshes institutions about once a day, so each sync overlaps the last one by
 // two weeks to catch pending→posted changes and late credits.
+// SimpleFIN Bridge limits each /accounts request to 90 days and expects at most about 24 requests a
+// day, disabling access tokens that exceed it (https://beta-bridge.simplefin.org/info/developers,
+// read 2026-10-28). Windows are capped at 90 days and manual syncs wait out a cooldown.
 const OVERLAP_DAYS = 14,
-  FIRST_SYNC_DAYS = 90;
+  MAX_WINDOW_DAYS = 90,
+  MANUAL_COOLDOWN_MS = 30 * 60 * 1000;
 export const secretLabel = (connectionId: string) =>
   `source_connection:${connectionId}`;
+
+export class SyncCooldownError extends Error {}
 
 export function syncWindow(
   lastSuccessAt: string | null,
   now = new Date(),
 ): SyncWindow {
   const today = localDate(now, TZ);
+  const endExclusive = shiftDays(today, 1),
+    earliest = shiftDays(endExclusive, -MAX_WINDOW_DAYS);
   const start = lastSuccessAt
     ? shiftDays(localDate(new Date(lastSuccessAt), TZ), -OVERLAP_DAYS)
-    : shiftDays(today, -FIRST_SYNC_DAYS);
-  return { start, endExclusive: shiftDays(today, 1) };
+    : earliest;
+  return { start: start < earliest ? earliest : start, endExclusive };
 }
 
 // Proposes a card for each unmapped account whose institution matches the card's issuer and whose
@@ -172,10 +180,21 @@ export async function syncConnection(
 ) {
   const prepared = await withOwner(ownerId, async (tx) => {
     const { rows } = await tx.query(
-      "select id, source, encrypted_secret, last_success_at from public.source_connections where id=$1 and status<>'revoked'",
+      "select id, source, encrypted_secret, last_success_at, last_attempted_at from public.source_connections where id=$1 and status<>'revoked'",
       [connectionId],
     );
     if (!rows[0]) throw new Error("Connection not found.");
+    const sinceLast = rows[0].last_attempted_at
+      ? now.getTime() - Date.parse(rows[0].last_attempted_at)
+      : Infinity;
+    if (
+      trigger === "manual" &&
+      sinceLast >= 0 &&
+      sinceLast < MANUAL_COOLDOWN_MS
+    )
+      throw new SyncCooldownError(
+        `This connection synced ${Math.max(1, Math.round(sinceLast / 60000))} minutes ago. SimpleFIN allows only about 24 requests a day, so try again in ${Math.ceil((MANUAL_COOLDOWN_MS - sinceLast) / 60000)} minutes.`,
+      );
     const window = syncWindow(rows[0].last_success_at, now);
     const run = await tx.query(
       `insert into public.source_syncs(connection_id,trigger,status,window_start,window_end)
