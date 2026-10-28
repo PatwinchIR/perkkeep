@@ -2,6 +2,27 @@
   "product": "Chase Ink Business Cash",
   "catalog_key": "chase-ink-business-cash",
   "issuer": "Chase",
-  "researched": false,
-  "rules": []
+  "researched": true,
+  "rules": [
+    {
+      "id": "ink-cash/instacart-credit",
+      "version": "2026-10-28",
+      "name": "Instacart+ membership (3 months) and $20 monthly Instacart credit",
+      "period": "monthly",
+      "amount_cents": 2000,
+      "enrollment_required": true,
+      "eligibility_notes": "Instacart purchases while the Instacart+ membership is active and paid with the card. Complimentary three-month Instacart+ membership; activated members get a $20 monthly Instacart credit. Benefit ends 2027-12-31. The page does not say whether unused credit rolls over. Requires enrollment/activation of Instacart+ with the card. Membership auto-renews at $99 per year after the complimentary period unless canceled.",
+      "source_url": "https://creditcards.chase.com/business-credit-cards/ink/cash",
+      "checked_on": "2026-10-28",
+      "effective_from": null,
+      "effective_to": "2028-01-01",
+      "verified": true,
+      "manual": false,
+      "matching": {
+        "credit_patterns": ["instacart"],
+        "purchase_patterns": ["instacart"],
+        "patterns_verified": false
+      }
+    }
+  ]
 }

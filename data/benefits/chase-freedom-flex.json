@@ -2,6 +2,67 @@
   "product": "Chase Freedom Flex",
   "catalog_key": "chase-freedom-flex",
   "issuer": "Chase",
-  "researched": false,
-  "rules": []
+  "researched": true,
+  "rules": [
+    {
+      "id": "flex/quarterly-activation",
+      "version": "2026-10-28",
+      "name": "5% quarterly bonus category activation",
+      "period": "quarterly",
+      "amount_cents": null,
+      "enrollment_required": true,
+      "eligibility_notes": "Q4 2026 grocery stores exclude Walmart, Target, wholesale and warehouse clubs, discount stores, drugstores, and gas stations run by grocery merchants. Q4 2026 dining excludes bakeries, caterers, meal kit services, gift card merchants, and stadium, hotel, casino, and theme park concessions unless classified as restaurants. American Red Cross donations must go through official Red Cross channels at redcross.org/chase. Dining stacks with the standing 3% dining rate for 7% total in Q4 2026 until the cap. 5% cash back on up to $1,500 in combined purchases in that quarter's bonus categories, then 1%. Q4 2026 (Oct 1 to Dec 31, 2026): Grocery Stores (excluding Walmart and Target), Dining, American Red Cross donations; activation opened Sep 15, 2026 and closes Dec 14, 2026. Q1 2027 (Jan 1 to Mar 31, 2027): Grocery Stores (excluding Walmart and Target), Top Streaming Services; activation opens Dec",
+      "source_url": "https://media.chase.com/news/chase-freedom-2026-q4-categories",
+      "checked_on": "2026-10-28",
+      "effective_from": null,
+      "effective_to": null,
+      "verified": true,
+      "manual": true,
+      "matching": {
+        "credit_patterns": [],
+        "purchase_patterns": [],
+        "patterns_verified": false
+      }
+    },
+    {
+      "id": "flex/doordash-dashpass",
+      "version": "2026-10-28",
+      "name": "Complimentary DashPass membership (6 months)",
+      "period": "custom",
+      "amount_cents": null,
+      "enrollment_required": true,
+      "eligibility_notes": "Requires a U.S. address; card must be used at checkout; third-party and digital wallet payments excluded. Six months of complimentary DashPass for DoorDash and Caviar when activated for the first time between 02/01/2025 and 12/31/2029. After the free period, membership auto-renews at the then-current monthly rate until canceled. Membership value stated 'as of 10/01/2026'. Activate by December 31, 2029 by adding the Freedom Flex as the default payment method in DoorDash and enrolling in DashPass.",
+      "source_url": "https://creditcards.chase.com/cash-back-credit-cards/freedom/flex",
+      "checked_on": "2026-10-28",
+      "effective_from": "2025-02-01",
+      "effective_to": "2030-01-01",
+      "verified": true,
+      "manual": true,
+      "matching": {
+        "credit_patterns": [],
+        "purchase_patterns": ["dashpass"],
+        "patterns_verified": false
+      }
+    },
+    {
+      "id": "flex/doordash-quarterly-promo",
+      "version": "2026-10-28",
+      "name": "DoorDash $10 off one non-restaurant order per quarter",
+      "period": "quarterly",
+      "amount_cents": 1000,
+      "enrollment_required": true,
+      "eligibility_notes": "Non-restaurant DoorDash orders (grocery, convenience, retail) placed with the enrolled card. Up to $10 off one non-restaurant DoorDash order each calendar quarter through December 31, 2029. Unused discounts do not roll over and have no cash value. Applied as a promotional discount at checkout, not a statement credit. The card used to enroll in DashPass must be used at checkout; requires active DashPass enrollment through the Chase benefit.",
+      "source_url": "https://creditcards.chase.com/cash-back-credit-cards/freedom/flex",
+      "checked_on": "2026-10-28",
+      "effective_from": null,
+      "effective_to": "2030-01-01",
+      "verified": true,
+      "manual": true,
+      "matching": {
+        "credit_patterns": [],
+        "purchase_patterns": ["doordash"],
+        "patterns_verified": false
+      }
+    }
+  ]
 }

@@ -15,4 +15,12 @@ Each rule records:
   - `purchase_patterns` match qualifying purchases.
   - While `patterns_verified` is `false`, matches are only candidates for your review. Set it to `true` once a real statement has shown the pattern is right, and matched credits then count as confirmed issuer credits. Record the date in `patterns_verified_on` and the statement wording in `observed_descriptor` (no amounts or account details).
 
-Products with an empty `rules` list and `researched: false` have not been researched yet. That does not mean they have no benefits.
+Products with an empty `rules` list and `researched: false` have not been researched yet. That does not mean they have no benefits. A researched product with an empty `rules` list (Prime Visa) has no trackable allowance; its earn rates and protections are in `research/`.
+
+## `research/`
+
+One file per product with the full research behind the rules: earn rates with caps, protections with coverage limits, fees, status perks, product version notes and every source with its read date. This is the input for the Phase 3 recommender and for terms maintenance. Each benefit there carries `verified` and `verification_note`; `verified: true` means the fact was read on the issuer's own domain on the stated date. Nothing in `research/` is loaded by the app.
+
+## Maintenance
+
+A scheduled task re-reads every `source_url` monthly, compares the terms against `research/`, and opens a pull request that bumps `version` and `checked_on` on changed rules. The owner reviews and merges; the app's terms-drift alerts then offer "Review and save a new version" on each affected benefit. No rule changes without that review.

@@ -224,11 +224,18 @@ describe("researched benefits for a confirmed card (synthetic owner)", () => {
     const first = (await withOwner(owner.id, (tx) =>
       runOperation(tx, "addResearchedBenefits", { card_id: unconfirmed.id }),
     )) as { added: string[]; skipped: string[] };
-    expect(first.skipped).toEqual([
-      "Global Entry, TSA PreCheck or NEXUS credit",
-      "The Shops at Chase credit",
-    ]);
-    expect(first.added).toHaveLength(7);
+    // Expectations derive from the rule file so adding a rule does not break the test.
+    const { RULE_FILES } = await import("../src/lib/catalog");
+    const reserve = RULE_FILES.find(
+      (f) => f.catalog_key === "chase-sapphire-reserve",
+    )!;
+    expect(first.skipped).toEqual(
+      reserve.rules.filter((r) => r.period === "custom").map((r) => r.name),
+    );
+    expect(first.added).toHaveLength(
+      reserve.rules.filter((r) => r.period !== "custom").length,
+    );
+    expect(first.skipped).toContain("The Shops at Chase credit");
     const again = (await withOwner(owner.id, (tx) =>
       runOperation(tx, "addResearchedBenefits", { card_id: unconfirmed.id }),
     )) as { added: string[] };

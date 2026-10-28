@@ -90,6 +90,46 @@
         "purchase_patterns": [],
         "patterns_verified": false
       }
+    },
+    {
+      "id": "amex-gold/hotel-collection-credit",
+      "version": "2026-10-28",
+      "name": "The Hotel Collection $100 credit",
+      "period": "custom",
+      "amount_cents": 10000,
+      "enrollment_required": false,
+      "eligibility_notes": "Book two consecutive nights or more at a Hotel Collection property (over 1,300 hotels per product page) through AmexTravel.com or the Amex Travel App, paid with the eligible Card. Eligible on-property charges vary by property. Also includes room upgrade and 12pm check-in / 4pm late check-out when available. Back-to-back stays within 24 hours at the same property count as one stay. Per booking: 'Benefits are applied per room, per stay (with a three-room limit per stay).' Applied at check-out by the property, not as an Amex statement credit. Must be used during the stay; not redeemable for cash. No enrollment stated.",
+      "source_url": "https://www.americanexpress.com/en-us/travel/the-hotel-collection/",
+      "checked_on": "2026-10-28",
+      "effective_from": null,
+      "effective_to": null,
+      "verified": true,
+      "manual": false,
+      "matching": {
+        "credit_patterns": ["hotel collection"],
+        "purchase_patterns": [],
+        "patterns_verified": false
+      }
+    },
+    {
+      "id": "amex-gold/venue-collection",
+      "version": "2026-10-28",
+      "name": "American Express Venue Collection: 10% back on concessions",
+      "period": "calendar_year",
+      "amount_cents": 25000,
+      "enrollment_required": true,
+      "eligibility_notes": "Qualifying concessions purchases at American Express Venue Collection venues with the enrolled Card. The product page does not list specific venues. 10% back on qualifying concessions purchases, up to $250 back per calendar year. amount_cents is the annual cap. Product page: enroll your Card; 'Limit one enrolled Card per Card Member.'",
+      "source_url": "https://www.americanexpress.com/us/credit-cards/card/gold-card/",
+      "checked_on": "2026-10-28",
+      "effective_from": null,
+      "effective_to": null,
+      "verified": true,
+      "manual": false,
+      "matching": {
+        "credit_patterns": ["venue collection"],
+        "purchase_patterns": [],
+        "patterns_verified": false
+      }
     }
   ]
 }
