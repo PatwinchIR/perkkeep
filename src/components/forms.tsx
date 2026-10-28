@@ -1,6 +1,9 @@
 "use client";
 import { useState, type FormEvent } from "react";
-import type { Card, Benefit, Period, Evidence, Json } from "@/lib/types";
+import type { Card, Benefit, Period, Evidence, SyncRun } from "@/lib/types";
+import type { OperationInput } from "@/lib/ledger-ops";
+type Terms = OperationInput<"version_benefit">["changes"];
+type EvidenceInput = OperationInput<"record_evidence">["record"];
 import { CATALOG } from "@/lib/catalog";
 import { CADENCES, localDate, parseCents, cardEnding } from "@/lib/domain";
 import { useApp } from "./provider";
@@ -35,7 +38,7 @@ export function CardForm({
   card: Card;
   onClose: () => void;
 }) {
-  const { db, refresh, notice, offline } = useApp(),
+  const { ledger, refresh, notice, offline } = useApp(),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   async function submit(e: FormEvent<HTMLFormElement>) {
@@ -44,19 +47,15 @@ export function CardForm({
     setBusy(true);
     setError("");
     try {
-      const { error } = await db
-        .from("cards")
-        .update({
-          display_name: text(f, "name"),
-          product_name: text(f, "product"),
-          last4: text(f, "last4") || null,
-          status: text(f, "status"),
-          cardmember_anchor_date: text(f, "anchor") || null,
-          issuer_timezone: text(f, "timezone"),
-          identity_verified_at: new Date().toISOString(),
-        })
-        .eq("id", card.id);
-      if (error) throw error;
+      await ledger.run("update_card", {
+        id: card.id,
+        display_name: text(f, "name"),
+        product_name: text(f, "product") || null,
+        last4: text(f, "last4") || null,
+        status: text(f, "status") as "active" | "closed" | "unknown",
+        cardmember_anchor_date: text(f, "anchor") || null,
+        issuer_timezone: text(f, "timezone"),
+      });
       await refresh();
       notice("Card details confirmed.");
       onClose();
@@ -165,7 +164,7 @@ export function BenefitForm({
   previous?: Benefit;
   onClose: () => void;
 }) {
-  const { db, refresh, notice, offline } = useApp(),
+  const { ledger, refresh, notice, offline } = useApp(),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [template, setTemplate] = useState(""),
@@ -190,12 +189,11 @@ export function BenefitForm({
         end = text(f, "effective_end");
       if (end && end <= start)
         throw new Error("The rule end must follow its start.");
-      const changes = {
-        card_id: card.id,
+      const changes: Terms = {
         name: text(f, "name"),
         description: text(f, "description"),
         category: text(f, "category") || "Other",
-        cadence,
+        cadence: cadence as Terms["cadence"],
         nominal_amount_cents: !units && amount ? parseCents(amount) : null,
         nominal_units: units && amount ? integer(amount) : null,
         unit_label: units ? text(f, "unit_label") : null,
@@ -228,14 +226,13 @@ export function BenefitForm({
         throw new Error(
           "Set a valid exclusive end date for this custom window.",
         );
-      const result = previous
-        ? await db.rpc("version_benefit", {
-            p_benefit_id: previous.id,
-            p_effective_from: start,
-            p_changes: changes,
-          })
-        : await db.from("benefits").insert(changes);
-      if (result.error) throw result.error;
+      if (previous)
+        await ledger.run("version_benefit", {
+          benefit_id: previous.id,
+          effective_from: start,
+          changes,
+        });
+      else await ledger.run("create_benefit", { ...changes, card_id: card.id });
       await refresh();
       notice(
         previous
@@ -480,7 +477,7 @@ export function EvidenceForm({
   correction?: Evidence;
   onClose: () => void;
 }) {
-  const { db, refresh, notice, offline } = useApp(),
+  const { ledger, refresh, notice, offline } = useApp(),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [id] = useState(() => crypto.randomUUID()),
@@ -517,10 +514,10 @@ export function EvidenceForm({
       const reference = Array.from(new Uint8Array(digest))
         .map((x) => x.toString(16).padStart(2, "0"))
         .join("");
-      const p_record = {
+      const p_record: EvidenceInput = {
         id,
         benefit_period_id: period.id,
-        source_type: source,
+        source_type: source as EvidenceInput["source_type"],
         source_reference_hash: reference,
         transaction_date: text(f, "date"),
         merchant: text(f, "merchant") || null,
@@ -535,13 +532,12 @@ export function EvidenceForm({
         confidence:
           source === "purchase" && confidence === "confirmed"
             ? "candidate"
-            : confidence,
+            : (confidence as EvidenceInput["confidence"]),
         recorded_by: "user",
         notes: text(f, "notes"),
         supersedes_evidence_id: correction?.id ?? null,
       };
-      const { error } = await db.rpc("record_evidence", { p_record });
-      if (error) throw error;
+      await ledger.run("record_evidence", { record: p_record });
       await refresh();
       notice("Evidence saved. Earlier records remain in history.");
       onClose();
@@ -673,7 +669,7 @@ export function RejectForm({
   period: Period;
   onClose: () => void;
 }) {
-  const { db, refresh, notice, offline } = useApp(),
+  const { ledger, refresh, notice, offline } = useApp(),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [id] = useState(() => crypto.randomUUID());
@@ -682,11 +678,11 @@ export function RejectForm({
     const f = new FormData(e.currentTarget);
     setBusy(true);
     try {
-      const { error } = await db.rpc("record_evidence", {
-        p_record: {
+      await ledger.run("record_evidence", {
+        record: {
           id,
           benefit_period_id: period.id,
-          source_type: evidence.source_type,
+          source_type: evidence.source_type as EvidenceInput["source_type"],
           transaction_date: evidence.transaction_date,
           amount_cents: evidence.amount_cents,
           units: evidence.units,
@@ -697,7 +693,6 @@ export function RejectForm({
           supersedes_evidence_id: evidence.id,
         },
       });
-      if (error) throw error;
       await refresh();
       notice("Candidate rejected; original evidence preserved.");
       onClose();
@@ -730,7 +725,7 @@ export function NoteForm({
   period: Period;
   onClose: () => void;
 }) {
-  const { db, refresh, notice, offline } = useApp(),
+  const { ledger, refresh, notice, offline } = useApp(),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   async function submit(e: FormEvent<HTMLFormElement>) {
@@ -738,11 +733,10 @@ export function NoteForm({
     const f = new FormData(e.currentTarget);
     setBusy(true);
     try {
-      const { error } = await db
-        .from("benefit_periods")
-        .update({ notes: text(f, "notes") })
-        .eq("id", period.id);
-      if (error) throw error;
+      await ledger.run("update_period_notes", {
+        period_id: period.id,
+        notes: text(f, "notes"),
+      });
       await refresh();
       notice("Note saved in the audit history.");
       onClose();
@@ -779,7 +773,7 @@ export function CoverageForm({
   periods: Period[];
   onClose: () => void;
 }) {
-  const { db, refresh, notice, offline } = useApp(),
+  const { ledger, refresh, notice, offline } = useApp(),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [coverage, setCoverage] = useState("partial"),
@@ -794,22 +788,21 @@ export function CoverageForm({
       const through = text(f, "through");
       if (through > localDate())
         throw new Error("Coverage cannot be in the future.");
-      const { data, error } = await db.rpc("apply_reconciliation", {
-        p_request_key: key,
-        p_trigger: "manual",
-        p_periods: ids.map((id) => ({
+      const data = (await ledger.run("apply_reconciliation", {
+        request_key: key,
+        trigger: "manual",
+        periods: ids.map((id) => ({
           id: String(id),
-          coverage_status: coverage,
+          coverage_status: coverage as "complete" | "partial" | "unavailable",
           coverage_through: through || null,
         })),
-        p_evidence: [],
-        p_summary: {
+        evidence: [],
+        summary: {
           source: "user_review",
           description: text(f, "description"),
           finances_available: "not_tested",
-        } as Json,
-      });
-      if (error) throw error;
+        },
+      })) as SyncRun;
       if (data.status === "failed")
         throw new Error(data.error_summary ?? "Reconciliation failed.");
       await refresh();
@@ -876,6 +869,128 @@ export function CoverageForm({
           disabled={busy || offline || !periods.length}
         >
           {busy ? "Saving…" : "Save reconciliation"}
+        </button>
+      </form>
+    </Dialog>
+  );
+}
+
+/**
+ * Exchange with an external reviewer such as an authorized ChatGPT Finances chat.
+ * The context omits card digits and internal owner IDs. The pasted request is
+ * validated on the server and applied by the same transactional, idempotent
+ * reconciliation operation as manual coverage. Nothing here grants the reviewer
+ * access to the ledger.
+ */
+export function ReconciliationExchange({
+  periods,
+  onClose,
+}: {
+  periods: Period[];
+  onClose: () => void;
+}) {
+  const { ledger, refresh, notice, offline } = useApp(),
+    [error, setError] = useState(""),
+    [busy, setBusy] = useState(false),
+    [copied, setCopied] = useState(false),
+    [result, setResult] = useState<SyncRun | null>(null);
+  const today = localDate();
+  const context = JSON.stringify(
+    {
+      instructions:
+        'Return one JSON object with request_key (new UUID), trigger "manual", periods [{id, coverage_status, coverage_through}], evidence [records], summary {source, coverage_limitations}. Purchases stay candidates. Do not include card numbers, account IDs or raw transaction feeds; hash source references with SHA-256.',
+      generated_on: today,
+      periods: periods
+        .filter((p) => p.period_end_exclusive > today || p.unresolved_count)
+        .map((p) => ({
+          id: p.id,
+          card: p.card_name,
+          benefit: p.benefit_name,
+          period_start: p.period_start,
+          period_end_exclusive: p.period_end_exclusive,
+          allowance_cents: p.allowance_cents,
+          allowance_units: p.allowance_units,
+          confirmed_cents: p.confirmed_cents,
+          candidate_cents: p.candidate_cents,
+          coverage_status: p.coverage_status,
+          coverage_through: p.coverage_through,
+        })),
+    },
+    null,
+    2,
+  );
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(context);
+      setCopied(true);
+    } catch {
+      setError("Copy failed. Select the text and copy it manually.");
+    }
+  }
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    setBusy(true);
+    setError("");
+    try {
+      let request: unknown;
+      try {
+        request = JSON.parse(text(f, "payload"));
+      } catch {
+        throw new Error("Paste one valid JSON reconciliation request.");
+      }
+      const run = (await ledger.run(
+        "apply_reconciliation",
+        request as OperationInput<"apply_reconciliation">,
+      )) as SyncRun;
+      await refresh();
+      setResult(run);
+      notice(
+        run.status === "failed"
+          ? "Import failed and nothing was applied. The failure is logged."
+          : "Reconciliation imported. Candidates stay unconfirmed.",
+      );
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Dialog title="Exchange a reconciliation" onClose={onClose}>
+      <p className="dialog-intro">
+        Copy this context into a chat that can read your transactions, then
+        paste back the request it produces. Perkkeep validates it and applies it
+        once; repeating the same request changes nothing.
+      </p>
+      <label>
+        Context to share (no card digits or account identifiers)
+        <textarea readOnly rows={6} value={context} />
+      </label>
+      <button className="secondary full-width" onClick={() => void copy()}>
+        {copied ? "Copied" : "Copy context"}
+      </button>
+      <form className="form-stack" onSubmit={submit}>
+        <label>
+          Reconciliation request (JSON)
+          <textarea name="payload" required rows={8} spellCheck={false} />
+        </label>
+        <label className="check">
+          <input type="checkbox" required /> I reviewed this request. It
+          reflects transactions I can see, and it records gaps as partial or
+          unavailable coverage.
+        </label>
+        <ErrorText error={error} />
+        {result && (
+          <p className="notice" role="status">
+            Run {result.status}: {result.periods_checked} period(s),{" "}
+            {result.candidates_found} new candidate(s),{" "}
+            {result.confirmed_updates} new confirmation(s).
+            {result.error_summary ? ` ${result.error_summary}` : ""}
+          </p>
+        )}
+        <button className="primary" disabled={busy || offline}>
+          {busy ? "Applying…" : "Validate and apply"}
         </button>
       </form>
     </Dialog>

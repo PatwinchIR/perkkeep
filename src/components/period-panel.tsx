@@ -21,7 +21,7 @@ export function PeriodPanel({
   period: Period;
   initialOpen?: boolean;
 }) {
-  const { data, db, refresh, notice, offline } = useApp(),
+  const { data, ledger, refresh, notice, offline } = useApp(),
     [open, setOpen] = useState(initialOpen),
     [modal, setModal] = useState<"evidence" | "note" | "reject" | null>(null),
     [selected, setSelected] = useState<Evidence | undefined>(),
@@ -40,14 +40,12 @@ export function PeriodPanel({
   async function enroll() {
     setBusy(true);
     setError("");
-    const { error } = await db
-      .from("benefits")
-      .update({ enrollment_status: "active" })
-      .eq("id", period.benefit_id);
-    if (error) setError(error.message);
-    else {
+    try {
+      await ledger.run("confirm_enrollment", { benefit_id: period.benefit_id });
       await refresh();
       notice("Enrollment marked active based on your confirmation.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unable to save.");
     }
     setBusy(false);
   }

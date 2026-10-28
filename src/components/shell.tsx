@@ -22,7 +22,7 @@ const nav = [
 ];
 export function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname(),
-    { busy, refresh, data, session } = useApp();
+    { busy, refresh, data, user } = useApp();
   const latest = data.runs[0],
     lastSuccess = data.runs.find((r) => r.status === "success");
   return (
@@ -70,12 +70,10 @@ export function Shell({ children }: { children: ReactNode }) {
           </Link>
         </div>
         <div className="account">
-          <span className="avatar">
-            {session.user.email?.slice(0, 1).toUpperCase()}
-          </span>
+          <span className="avatar">{user.email.slice(0, 1).toUpperCase()}</span>
           <div>
             <strong>Personal workspace</strong>
-            <span>{session.user.email}</span>
+            <span>{user.email}</span>
           </div>
         </div>
       </aside>

@@ -1,4 +1,8 @@
 import { defineConfig } from "@playwright/test";
+// Optional override for environments that provide their own Chromium build.
+const chromiumLaunch = process.env.PLAYWRIGHT_CHROMIUM_PATH
+  ? { launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH } }
+  : {};
 export default defineConfig({
   testDir: "tests/e2e",
   fullyParallel: false,
@@ -14,12 +18,17 @@ export default defineConfig({
   projects: [
     {
       name: "chromium-desktop",
-      use: { browserName: "chromium", viewport: { width: 1440, height: 1000 } },
+      use: {
+        browserName: "chromium",
+        viewport: { width: 1440, height: 1000 },
+        ...chromiumLaunch,
+      },
     },
     {
       name: "chromium-phone",
       use: {
         browserName: "chromium",
+        ...chromiumLaunch,
         viewport: { width: 375, height: 812 },
         isMobile: true,
         hasTouch: true,

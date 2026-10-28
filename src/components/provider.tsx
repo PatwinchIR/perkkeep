@@ -8,19 +8,18 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { Session, SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@/lib/database.types";
 import type { Snapshot } from "@/lib/types";
-import { getSupabase, isLocal } from "@/lib/supabase";
-import { loadSnapshot } from "@/lib/data";
+import { createBackend, type AuthState, type Backend } from "@/lib/backend";
 import Link from "next/link";
 import { ArrowUpRight, Leaf, LockKeyhole, Mail } from "lucide-react";
 
+type User = { id: string; email: string };
 type AppContext = {
-  db: SupabaseClient<Database>;
+  ledger: Backend;
   data: Snapshot;
-  session: Session;
+  user: User;
   refresh: () => Promise<void>;
+  signOut: () => Promise<void>;
   busy: boolean;
   offline: boolean;
   notice: (text: string) => void;
@@ -41,9 +40,8 @@ const EMPTY: Snapshot = {
   periodErrors: [],
 };
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [db] = useState(getSupabase),
-    [session, setSession] = useState<Session | null>(null),
-    [authReady, setAuthReady] = useState(false),
+  const [ledger] = useState<Backend>(createBackend),
+    [auth, setAuth] = useState<AuthState | null>(null),
     [data, setData] = useState<Snapshot>(EMPTY),
     [busy, setBusy] = useState(false),
     [loaded, setLoaded] = useState(false),
@@ -55,51 +53,57 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const invalidate = useCallback(() => {
     generation.current++;
   }, []);
+  const checkAuth = useCallback(async () => {
+    try {
+      setAuth(await ledger.current());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unable to check sign-in.");
+      setAuth((previous) => previous ?? { status: "signed_out" });
+    }
+  }, [ledger]);
   useEffect(() => {
-    if (!db) return;
-    let mounted = true;
-    const {
-      data: { subscription },
-    } = db.auth.onAuthStateChange((_event, next) => {
-      if (mounted) {
-        setSession(next);
-        setAuthReady(true);
-      }
-    });
-    db.auth.getSession().then(({ data, error }) => {
-      if (mounted) {
-        setSession(data.session);
-        if (error) setError(error.message);
-        setAuthReady(true);
-      }
-    });
+    const timer = setTimeout(() => void checkAuth(), 0);
+    const unsubscribe = ledger.subscribe(() => void checkAuth());
     return () => {
-      mounted = false;
-      subscription.unsubscribe();
+      clearTimeout(timer);
+      unsubscribe();
     };
-  }, [db]);
-  const userId = session?.user.id;
+  }, [ledger, checkAuth]);
+  const user = auth?.status === "signed_in" ? auth.user : null;
+  const userId = user?.id;
   const refresh = useCallback(async () => {
-    if (!db || !userId) return;
+    if (!userId) return;
     const id = ++generation.current;
     setBusy(true);
     setError("");
     try {
-      const snapshot = await loadSnapshot(db);
+      const snapshot = await ledger.load();
       if (generation.current === id) {
         setData(snapshot);
         setLoadedFor(userId);
         setLoaded(true);
       }
     } catch (e) {
-      if (generation.current === id)
+      if (generation.current === id) {
+        const status = (e as { status?: number }).status;
+        // An expired or revoked session returns the app to the sign-in screen.
+        if (status === 401 || status === 403) void checkAuth();
         setError(
           e instanceof Error ? e.message : "Could not load your records.",
         );
+      }
     } finally {
       if (generation.current === id) setBusy(false);
     }
-  }, [db, userId]);
+  }, [ledger, userId, checkAuth]);
+  const signOut = useCallback(async () => {
+    invalidate();
+    await ledger.signOut();
+    setData(EMPTY);
+    setLoaded(false);
+    setLoadedFor(null);
+    await checkAuth();
+  }, [ledger, checkAuth, invalidate]);
   useEffect(() => {
     const timer = setTimeout(() => {
       setData(EMPTY);
@@ -144,30 +148,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         /* Installation is optional; online records still work. */
       });
   }, []);
-  if (!db)
-    return (
-      <Welcome>
-        <h1>
-          A little setup,
-          <br />a lot to keep.
-        </h1>
-        <p>
-          Perkkeep needs its own Supabase connection before you can sign in. The
-          setup guide in this project explains how to connect it.
-        </p>
-        <div className="notice">
-          No financial records are loaded. Your existing projects have not been
-          connected.
-        </div>
-      </Welcome>
-    );
-  if (!authReady)
+  if (!auth)
     return (
       <div className="loading-screen" role="status">
         Opening Perkkeep…
       </div>
     );
-  if (!session) return <Login db={db} />;
+  if (!user) return <Login ledger={ledger} auth={auth} onChange={checkAuth} />;
   if (!loaded || loadedFor !== userId)
     return (
       <div className="loading-screen">
@@ -183,14 +170,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ) : (
           <p role="status">Loading your private ledger…</p>
         )}
-        <button className="text-button" onClick={() => void db.auth.signOut()}>
+        <button className="text-button" onClick={() => void signOut()}>
           Sign out
         </button>
       </div>
     );
   return (
     <Context.Provider
-      value={{ db, data, session, refresh, busy, offline, notice: setToast }}
+      value={{
+        ledger,
+        data,
+        user,
+        refresh,
+        signOut,
+        busy,
+        offline,
+        notice: setToast,
+      }}
     >
       {offline && (
         <div className="global-banner" role="status">
@@ -251,76 +247,126 @@ function Welcome({ children }: { children: ReactNode }) {
     </main>
   );
 }
-function Login({ db }: { db: SupabaseClient<Database> }) {
-  const [email, setEmail] = useState(""),
+function Login({
+  ledger,
+  auth,
+  onChange,
+}: {
+  ledger: Backend;
+  auth: AuthState;
+  onChange: () => Promise<void>;
+}) {
+  const [email, setEmail] = useState(
+      auth.status === "unverified" || auth.status === "not_allowed"
+        ? auth.email
+        : "",
+    ),
     [password, setPassword] = useState(""),
     [loading, setLoading] = useState(false),
     [error, setError] = useState(""),
     [message, setMessage] = useState(""),
-    [create, setCreate] = useState(false);
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
+    [create, setCreate] = useState(false),
+    [resetToken] = useState(() =>
+      typeof window === "undefined"
+        ? null
+        : new URLSearchParams(window.location.search).get("token"),
+    );
+  async function run(action: () => Promise<string | null>) {
     setLoading(true);
     setError("");
+    setMessage("");
     try {
-      const result = create
-        ? await db.auth.signUp({ email, password })
-        : await db.auth.signInWithPassword({ email, password });
-      if (result.error) throw result.error;
-      if (!result.data.session)
-        setMessage("Check your email to finish signing in.");
+      const text = await action();
+      if (text) setMessage(text);
+      await onChange();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Sign-in failed.");
     } finally {
       setLoading(false);
     }
   }
-  async function magicLink() {
+  function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (resetToken) {
+      void run(async () => {
+        const text = await ledger.resetPassword(resetToken, password);
+        window.history.replaceState(null, "", "/");
+        return text;
+      });
+      return;
+    }
+    void run(() =>
+      create ? ledger.signUp(email, password) : ledger.signIn(email, password),
+    );
+  }
+  function passwordReset() {
     if (!email) {
       setError("Enter your email address first.");
       return;
     }
-    setLoading(true);
-    const { error } = await db.auth.signInWithOtp({
-      email,
-      options: {
-        shouldCreateUser: false,
-        emailRedirectTo: window.location.origin,
-      },
-    });
-    setLoading(false);
-    if (error) setError(error.message);
-    else setMessage("Check your email for a secure sign-in link.");
+    void run(() => ledger.requestPasswordReset(email));
   }
   return (
     <Welcome>
       <span className="eyebrow">YOUR BENEFITS, TOGETHER</span>
-      <h1>{create ? "Make yourself at home." : "Welcome back."}</h1>
+      <h1>
+        {resetToken
+          ? "Choose a new password."
+          : create
+            ? "Make yourself at home."
+            : "Welcome back."}
+      </h1>
       <p>Sign in to your personal benefits ledger.</p>
-      {isLocal() && (
-        <div className="local-label">
-          Local workspace · data stays on this computer
+      {auth.status === "unverified" && (
+        <div className="notice" role="status">
+          {auth.email} is signed in but not verified yet. Open the link in your
+          email, then sign in again.
+          <button
+            className="text-button"
+            disabled={loading}
+            onClick={() =>
+              void run(() => ledger.resendVerification(auth.email))
+            }
+          >
+            Send a new verification link
+          </button>
+        </div>
+      )}
+      {auth.status === "not_allowed" && (
+        <div className="notice" role="status">
+          {auth.email} does not have access to this private ledger.
+          <button
+            className="text-button"
+            disabled={loading}
+            onClick={() => void run(async () => (await ledger.signOut(), null))}
+          >
+            Sign out
+          </button>
         </div>
       )}
       <form onSubmit={submit} className="form-stack">
+        {!resetToken && (
+          <label>
+            Email address
+            <input
+              type="email"
+              autoComplete="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+            />
+          </label>
+        )}
         <label>
-          Email address
-          <input
-            type="email"
-            autoComplete="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
-          />
-        </label>
-        <label>
-          Password
+          {resetToken ? "New password" : "Password"}
           <input
             type="password"
-            autoComplete={create ? "new-password" : "current-password"}
+            autoComplete={
+              create || resetToken ? "new-password" : "current-password"
+            }
             required
-            minLength={8}
+            minLength={12}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
@@ -338,20 +384,24 @@ function Login({ db }: { db: SupabaseClient<Database> }) {
         <button className="primary" disabled={loading}>
           {loading
             ? "One moment…"
-            : create
-              ? "Create local account"
-              : "Sign in"}
+            : resetToken
+              ? "Save new password"
+              : create
+                ? "Create owner account"
+                : "Sign in"}
           <ArrowUpRight size={17} />
         </button>
       </form>
-      <button
-        className="secondary full-width"
-        disabled={loading}
-        onClick={() => void magicLink()}
-      >
-        <Mail size={16} /> Email me a sign-in link
-      </button>
-      {isLocal() && (
+      {!resetToken && (
+        <button
+          className="secondary full-width"
+          disabled={loading}
+          onClick={passwordReset}
+        >
+          <Mail size={16} /> Email me a password reset link
+        </button>
+      )}
+      {!resetToken && (
         <button
           className="text-button"
           onClick={() => {
@@ -361,7 +411,7 @@ function Login({ db }: { db: SupabaseClient<Database> }) {
         >
           {create
             ? "Already have an account? Sign in"
-            : "First visit? Create a local account"}
+            : "First visit? Create the owner account"}
         </button>
       )}
       <p className="fine-print">

@@ -17,7 +17,12 @@ import {
 import { useApp } from "./provider";
 import { CardTile, Empty, PageHeading } from "./ui";
 import { PeriodPanel } from "./period-panel";
-import { BenefitForm, CardForm, CoverageForm } from "./forms";
+import {
+  BenefitForm,
+  CardForm,
+  CoverageForm,
+  ReconciliationExchange,
+} from "./forms";
 import {
   activePeriod,
   cardEnding,
@@ -33,7 +38,7 @@ import {
 import type { Benefit } from "@/lib/types";
 
 export function Dashboard() {
-  const { data, db, refresh, notice, offline } = useApp(),
+  const { data, ledger, refresh, notice, offline } = useApp(),
     [issuer, setIssuer] = useState("all"),
     [cardFilter, setCardFilter] = useState("all"),
     [cadence, setCadence] = useState("all"),
@@ -84,7 +89,10 @@ export function Dashboard() {
   );
   async function setup() {
     setBusy(true);
-    const { error } = await db.rpc("initialize_cards");
+    const error = await ledger.run("initialize_cards", {}).then(
+      () => null,
+      (e: Error) => e,
+    );
     if (error) setError(error.message);
     else {
       await refresh();
@@ -347,7 +355,7 @@ export function CardsScreen() {
 }
 
 export function CardScreen({ id }: { id: string }) {
-  const { data, db, refresh, notice, offline } = useApp(),
+  const { data, ledger, refresh, notice, offline } = useApp(),
     [modal, setModal] = useState<"card" | "benefit" | null>(null),
     [previous, setPrevious] = useState<Benefit | undefined>(),
     [error, setError] = useState(""),
@@ -376,10 +384,15 @@ export function CardScreen({ id }: { id: string }) {
     setBusy(true);
     setError("");
     const f = new FormData(e.currentTarget);
-    const { error } = await db.rpc("ensure_period", {
-      p_benefit_id: String(f.get("benefit")),
-      p_on: String(f.get("day")),
-    });
+    const error = await ledger
+      .run("ensure_period", {
+        benefit_id: String(f.get("benefit")),
+        on: String(f.get("day")),
+      })
+      .then(
+        () => null,
+        (e: Error) => e,
+      );
     if (error) setError(error.message);
     else {
       await refresh();
@@ -389,10 +402,12 @@ export function CardScreen({ id }: { id: string }) {
   }
   async function pause(b: Benefit) {
     setBusy(true);
-    const { error } = await db
-      .from("benefits")
-      .update({ enabled: !b.enabled })
-      .eq("id", b.id);
+    const error = await ledger
+      .run("set_benefit_enabled", { benefit_id: b.id, enabled: !b.enabled })
+      .then(
+        () => null,
+        (e: Error) => e,
+      );
     if (error) setError(error.message);
     else {
       await refresh();
@@ -806,13 +821,17 @@ export function HistoryScreen() {
 }
 
 export function SettingsScreen() {
-  const { db, data, notice } = useApp(),
+  const { data, notice, signOut } = useApp(),
     [coverage, setCoverage] = useState(false),
+    [exchange, setExchange] = useState(false),
     [error, setError] = useState("");
   async function signout() {
-    const { error } = await db.auth.signOut();
-    if (error) setError(error.message);
-    else notice("Signed out.");
+    try {
+      await signOut();
+      notice("Signed out.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unable to sign out.");
+    }
   }
   return (
     <>
@@ -828,9 +847,9 @@ export function SettingsScreen() {
           </span>
           <h2>Your data, your call.</h2>
           <p>
-            Perkkeep reads your private Supabase ledger. Bank transactions are
-            not fetched by this app. ChatGPT Finances access and scheduled
-            reconciliation have not been verified.
+            Perkkeep reads your private ledger through its own server. Bank
+            transactions are not fetched by this app. ChatGPT Finances access
+            and scheduled reconciliation have not been verified.
           </p>
           <span className="badge needs_review">Manual reconciliation</span>
           <button
@@ -839,6 +858,13 @@ export function SettingsScreen() {
             onClick={() => setCoverage(true)}
           >
             Record a manual reconciliation
+          </button>
+          <button
+            className="secondary"
+            disabled={!data.periods.length}
+            onClick={() => setExchange(true)}
+          >
+            Exchange with a transaction reviewer
           </button>
           <p className="hint">
             Refresh reloads saved records. It does not check your bank.
@@ -855,9 +881,8 @@ export function SettingsScreen() {
             <li>Name it Perkkeep and tap Add.</li>
           </ol>
           <p className="hint">
-            Localhost is for testing on this computer. Offline mode shows a
-            reconnect page; financial records are not stored in the
-            service-worker cache.
+            Offline mode shows a reconnect page; financial records are not
+            stored in the service-worker cache.
           </p>
         </section>
       </div>
@@ -912,6 +937,12 @@ export function SettingsScreen() {
           </p>
         )}
       </div>
+      {exchange && (
+        <ReconciliationExchange
+          periods={data.periods}
+          onClose={() => setExchange(false)}
+        />
+      )}
       {coverage && (
         <CoverageForm
           periods={data.periods}

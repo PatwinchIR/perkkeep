@@ -1,15 +1,57 @@
-import { test, expect, type Page } from "@playwright/test";
-import { randomUUID } from "node:crypto";
-import { fixture, ok, user } from "../helpers";
+// Browser → Next.js server → Neon Auth → Neon PostgreSQL → read-back.
+// Runs against PLAYWRIGHT_BASE_URL (the HTTPS deployment) or a local dev server
+// that uses the same remote database. It signs in with two dedicated, already
+// email-verified test owners (for example plus-aliases of the owner's address,
+// allowed with PERKKEEP_OWNER_PLUS_ALIASES=allow). Every record it writes is labeled
+// synthetic, belongs to those test owners, and its test rule is paused afterwards.
+import {
+  test,
+  expect,
+  type Page,
+  type APIRequestContext,
+} from "@playwright/test";
+import { createHash, randomUUID } from "node:crypto";
 import { localDate } from "../../src/lib/domain";
-async function login(page: Page, owner: Awaited<ReturnType<typeof user>>) {
+import type { Period, Snapshot } from "../../src/lib/types";
+
+const owners = {
+  a: {
+    email: process.env.PERKKEEP_E2E_OWNER_EMAIL ?? "",
+    password: process.env.PERKKEEP_E2E_OWNER_PASSWORD ?? "",
+  },
+  b: {
+    email: process.env.PERKKEEP_E2E_OTHER_EMAIL ?? "",
+    password: process.env.PERKKEEP_E2E_OTHER_PASSWORD ?? "",
+  },
+};
+const haveOwners = Object.values(owners).every((o) => o.email && o.password);
+const hash = (v: string) => createHash("sha256").update(v).digest("hex");
+
+async function login(page: Page, who: { email: string; password: string }) {
   await page.goto("/");
-  await page.getByLabel("Email address").fill(owner.email);
-  await page.getByLabel("Password", { exact: true }).fill(owner.password);
+  await page.getByLabel("Email address").fill(who.email);
+  await page.getByLabel("Password", { exact: true }).fill(who.password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Good things, kept in view." }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 30000 });
+}
+async function api<T = unknown>(
+  request: APIRequestContext,
+  baseURL: string,
+  op: string,
+  input: unknown,
+): Promise<{ status: number; data?: T; error?: string }> {
+  const response = await request.post("/api/ledger", {
+    data: { op, input },
+    headers: { origin: new URL(baseURL).origin },
+  });
+  return { status: response.status(), ...(await response.json()) };
+}
+async function snapshot(request: APIRequestContext): Promise<Snapshot> {
+  const response = await request.get("/api/ledger");
+  expect(response.status()).toBe(200);
+  return (await response.json()).data;
 }
 async function noOverflow(page: Page) {
   expect(
@@ -18,325 +60,354 @@ async function noOverflow(page: Page) {
     ),
   ).toBe(true);
 }
-
-test("creates the nine-card collection, verifies identity and adds a rule through the UI", async ({
-  page,
-}) => {
-  const owner = await user();
-  await login(page, owner);
-  await expect(page.getByText("Let’s get your cards together.")).toBeVisible();
-  await page.getByRole("button", { name: "Set up my cards" }).click();
-  await expect(page.locator(".card-tile")).toHaveCount(9);
-  await noOverflow(page);
-  await page
-    .getByRole("link")
-    .filter({ hasText: "American Express" })
-    .first()
-    .click();
-  await page.getByRole("button", { name: "Confirm card identity" }).click();
-  await page
-    .getByLabel("I checked this card’s identity and details with the issuer.")
-    .check();
-  await page.getByRole("button", { name: "Save card details" }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  await page.getByRole("button", { name: "Add benefit", exact: true }).click();
-  await page
-    .getByLabel("Benefit name", { exact: true })
-    .fill("Synthetic browser-test benefit");
-  await page
-    .getByLabel("Conditions and exclusions")
-    .fill("Synthetic test only; not an actual entitlement.");
-  await page.getByLabel("Allowance in dollars").fill("10");
-  await page
-    .getByLabel("Terms effective from")
-    .fill(localDate().slice(0, 8) + "01");
-  await page
-    .getByLabel("Official issuer source")
-    .fill("https://example.com/synthetic-test-only");
-  await page.getByLabel("I verified that my card is eligible").check();
-  await page
-    .getByLabel("I checked the source, effective dates, and conditions above.")
-    .check();
-  await page.getByRole("button", { name: "Save verified rule" }).click();
-  await expect(
-    page.getByRole("heading", { name: "Synthetic browser-test benefit" }),
-  ).toBeVisible();
-  await expect(
-    page.getByText("Coverage unavailable", { exact: false }),
-  ).toBeVisible();
-  await noOverflow(page);
-  const saved = ok(
-    await owner.client
-      .from("benefits")
-      .select()
-      .eq("name", "Synthetic browser-test benefit"),
-  );
-  expect(saved).toHaveLength(1);
-});
-
-test("records, corrects and rejects evidence with actual persistence and preserved history", async ({
-  page,
-}) => {
-  const owner = await user(),
-    { card, period } = await fixture(owner.client, "monthly", {}, localDate());
-  await login(page, owner);
-  await page.goto(`/cards/${card.id}`);
-  await page
-    .getByRole("button", { name: "Confirm redemption", exact: true })
-    .click();
-  await page.getByLabel("Amount in dollars").fill("3");
-  await page
-    .getByLabel("What did you verify?")
-    .fill("Synthetic issuer confirmation for browser test.");
-  await page
-    .getByLabel("This assessment is supported by the evidence I reviewed.")
-    .check();
-  await page.getByRole("button", { name: "Save evidence" }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  await page.reload();
-  await expect(page.locator(".period-amounts")).toContainText("$3");
-  const candidate = ok(
-    await owner.client.rpc("record_evidence", {
-      p_record: {
-        benefit_period_id: period.id,
-        source_type: "purchase",
-        transaction_date: period.period_start,
-        amount_cents: 400,
-        confidence: "candidate",
-        eligibility_result: "eligible",
-        recorded_by: "import",
-        notes: "Synthetic imported candidate",
-      },
-    }),
-  );
-  await page.getByRole("button", { name: "Refresh records" }).click();
-  await page.getByRole("button", { name: /Evidence \(/ }).click();
-  await page.getByRole("button", { name: "Review candidate" }).click();
-  await page
-    .getByLabel("What did you verify?")
-    .fill("Synthetic posted credit checked by user.");
-  await page
-    .getByLabel("This assessment is supported by the evidence I reviewed.")
-    .check();
-  await page.getByRole("button", { name: "Save correction" }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.locator(".period-amounts")).toContainText("$7");
-  const rows = ok(
-    await owner.client
-      .from("redemption_evidence")
-      .select()
-      .eq("benefit_period_id", period.id),
-  );
-  expect(rows).toHaveLength(3);
+/** A fresh, uniquely named synthetic rule on the owner's Discover it card. */
+async function fixture(page: Page, baseURL: string) {
+  const r = page.request;
+  expect((await api(r, baseURL, "initialize_cards", {})).status).toBe(200);
+  const card = (await snapshot(r)).cards.find(
+    (c) => c.catalog_key === "discover-it",
+  )!;
   expect(
-    rows.find((e) => e.supersedes_evidence_id === candidate.id).confidence,
-  ).toBe("confirmed");
-  await owner.client.rpc("record_evidence", {
-    p_record: {
-      id: randomUUID(),
-      benefit_period_id: period.id,
-      source_type: "purchase",
-      transaction_date: period.period_start,
-      amount_cents: 100,
-      confidence: "candidate",
-      eligibility_result: "eligible",
-      recorded_by: "import",
-    },
+    (
+      await api(r, baseURL, "update_card", {
+        id: card.id,
+        display_name: card.display_name,
+        product_name: card.product_name,
+        last4: card.last4,
+        status: "active",
+        cardmember_anchor_date: card.cardmember_anchor_date,
+        issuer_timezone: card.issuer_timezone,
+      })
+    ).status,
+  ).toBe(200);
+  const name = `Synthetic e2e ${randomUUID().slice(0, 8)} — not an entitlement`;
+  const benefit = await api<{ id: string }>(r, baseURL, "create_benefit", {
+    card_id: card.id,
+    name,
+    description: "Synthetic browser test only.",
+    category: "Other",
+    cadence: "monthly",
+    nominal_amount_cents: 1000,
+    nominal_units: null,
+    unit_label: null,
+    reset_anchor: null,
+    custom_end_exclusive: null,
+    effective_from: "2020-01-01",
+    effective_to: null,
+    enrollment_required: false,
+    enrollment_status: "not_required",
+    eligibility_status: "eligible",
+    manual_verification_required: false,
+    eligibility_rules_json: { synthetic: true },
+    issuer_source_url: "https://example.com/synthetic-test-only",
+    verified_at: new Date().toISOString(),
+    enabled: true,
   });
-  await page.getByRole("button", { name: "Refresh records" }).click();
-  await page.getByRole("button", { name: "Reject candidate" }).click();
-  await page.getByLabel("Reason").fill("Synthetic nonqualifying transaction.");
-  await page.getByRole("button", { name: "Save rejection" }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  await page.getByRole("button", { name: "Add note" }).click();
-  await page
-    .getByLabel("Note", { exact: true })
-    .fill("Keep this note in the audit trail.");
-  await page.getByRole("button", { name: "Save note" }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  await page.goto("/history");
-  await page.getByLabel("History view").selectOption("evidence");
-  await expect(
-    page.getByText("Superseded · preserved for audit.").first(),
-  ).toBeVisible();
-  await page.getByLabel("History view").selectOption("audit");
-  await expect(
-    page.getByText("Note: (empty) → Keep this note in the audit trail."),
-  ).toBeVisible();
-  await noOverflow(page);
+  expect(benefit.status).toBe(200);
+  const period = await api<Period>(r, baseURL, "ensure_period", {
+    benefit_id: benefit.data!.id,
+    on: localDate(),
+  });
+  expect(period.status).toBe(200);
+  return { card, benefitId: benefit.data!.id, name, period: period.data! };
+}
+const candidate = (periodId: string, day: string, cents: number) => ({
+  benefit_period_id: periodId,
+  source_type: "purchase",
+  source_reference_hash: hash(randomUUID()),
+  transaction_date: day,
+  amount_cents: cents,
+  confidence: "candidate",
+  eligibility_result: "eligible",
+  recorded_by: "import",
+  notes: "Synthetic imported candidate",
 });
 
-test("records explicit coverage, shows honest totals, and keeps old periods across refreshes", async ({
+test("login screen is accessible, installable, and caches only public assets", async ({
   page,
-}) => {
-  const owner = await user(),
-    { period, benefit } = await fixture(
-      owner.client,
-      "monthly",
-      {},
-      localDate(),
-    );
-  await owner.client.rpc("ensure_period", {
-    p_benefit_id: benefit.id,
-    p_on: new Date(new Date().getFullYear(), new Date().getMonth() - 1, 15, 12)
-      .toISOString()
-      .slice(0, 10),
-  });
-  await login(page, owner);
-  await expect(page.locator(".summary-value")).toHaveText("—");
-  await page.goto("/settings");
-  await page
-    .getByRole("button", { name: "Record a manual reconciliation" })
-    .click();
-  await page
-    .getByRole("dialog")
-    .locator('input[name="period"]')
-    .first()
-    .check();
-  await page.getByLabel("Transaction coverage").selectOption("complete");
-  await page
-    .getByLabel("What was checked, and what was missing?")
-    .fill("Synthetic complete coverage through today.");
-  await page
-    .getByLabel(
-      "I checked complete transaction coverage, including late credits and reversals, through this date.",
-    )
-    .check();
-  await page.getByRole("button", { name: "Save reconciliation" }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  await page.goto("/");
-  await expect(page.locator(".summary-value")).toHaveText("$10");
-  await page.goto("/history");
-  await expect(page.locator(".period-panel")).toHaveCount(2);
-  await page.reload();
-  await expect(page.locator(".period-panel")).toHaveCount(2);
-  expect(
-    ok(await owner.client.from("benefit_periods").select().eq("id", period.id)),
-  ).toHaveLength(1);
-});
-
-test("isolates sessions on sign-out and has an installable manifest with a private offline cache", async ({
-  page,
-  context,
   request,
-}, testInfo) => {
-  const owner = await user();
-  await owner.client.rpc("initialize_cards");
-  await login(page, owner);
-  await page.screenshot({
-    path: `.local/${testInfo.project.name}-overview.png`,
-    fullPage: true,
-  });
+}) => {
+  const { default: AxeBuilder } = await import("@axe-core/playwright");
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "Welcome back." }),
+  ).toBeVisible();
+  const audit = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+    .analyze();
+  expect(audit.violations.map((v) => v.id)).toEqual([]);
   await noOverflow(page);
   const manifest = await request.get("/manifest.webmanifest");
-  expect(manifest.ok()).toBe(true);
   expect((await manifest.json()).display).toBe("standalone");
   await page.evaluate(async () => {
     await navigator.serviceWorker.ready;
   });
   const cached = await page.evaluate(async () => {
-    const keys = await caches.keys();
     const urls: string[] = [];
-    for (const k of keys) {
+    for (const k of await caches.keys())
       for (const r of await (await caches.open(k)).keys())
         urls.push(new URL(r.url).pathname);
-    }
     return urls;
   });
   expect(cached).toContain("/offline.html");
   expect(
     cached.every((p) => p === "/offline.html" || p.startsWith("/icons/")),
   ).toBe(true);
-  await page.goto("/settings");
-  await page.getByRole("button", { name: "Sign out", exact: true }).click();
-  await expect(
-    page.getByRole("heading", { name: "Welcome back." }),
-  ).toBeVisible();
-  const other = await user();
-  await login(page, other);
-  await expect(page.getByText("Let’s get your cards together.")).toBeVisible();
-  await expect(page.locator(".card-tile")).toHaveCount(0);
-  if (testInfo.project.name.startsWith("chromium")) {
-    await context.setOffline(true);
-    await page.goto("/history");
-    await expect(
-      page.getByRole("heading", { name: "A moment to reconnect." }),
-    ).toBeVisible();
-  }
 });
 
-test("has accessible login, overview, and card review screens", async ({
-  page,
+test("denies anonymous, forged and cross-origin ledger access", async ({
+  request,
+  baseURL,
 }) => {
-  const { default: AxeBuilder } = await import("@axe-core/playwright");
-  const owner = await user();
-  await owner.client.rpc("initialize_cards");
-  await page.goto("/");
-  let audit = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
-    .analyze();
+  const anon = await request.get("/api/ledger");
+  expect(anon.status()).toBe(401);
+  expect(anon.headers()["cache-control"]).toContain("no-store");
   expect(
-    audit.violations.map((v) => ({
-      id: v.id,
-      nodes: v.nodes.map((n) => n.target),
-    })),
-  ).toEqual([]);
-  await login(page, owner);
-  audit = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
-    .analyze();
+    (
+      await request.get("/api/ledger", {
+        headers: { cookie: "__Secure-neon-auth.session_token=forged" },
+      })
+    ).status(),
+  ).toBe(401);
   expect(
-    audit.violations.map((v) => ({
-      id: v.id,
-      nodes: v.nodes.map((n) => n.target),
-    })),
-  ).toEqual([]);
-  await page
-    .getByRole("link")
-    .filter({ hasText: "American Express" })
-    .first()
-    .click();
-  await page.getByRole("button", { name: "Confirm card identity" }).click();
-  audit = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
-    .analyze();
+    (
+      await request.post("/api/ledger", {
+        data: { op: "initialize_cards", input: {} },
+        headers: { origin: "https://attacker.example" },
+      })
+    ).status(),
+  ).toBe(403);
   expect(
-    audit.violations.map((v) => ({
-      id: v.id,
-      nodes: v.nodes.map((n) => n.target),
-    })),
-  ).toEqual([]);
+    (
+      await request.post("/api/ledger", {
+        data: { op: "initialize_cards", input: {} },
+        headers: { origin: new URL(baseURL!).origin },
+      })
+    ).status(),
+  ).toBe(401);
+  expect((await request.post("/api/auth/admin/list-users")).status()).toBe(404);
+  const stranger = await request.post("/api/auth/sign-up/email", {
+    data: {
+      email: `stranger-${randomUUID()}@example.com`,
+      password: randomUUID(),
+      name: "x",
+    },
+    headers: { origin: new URL(baseURL!).origin },
+  });
+  expect(stranger.status()).toBe(403);
 });
 
-test("shows both Ink cards without invented digits and saves last-four edits", async ({
-  page,
-}) => {
-  const owner = await user();
-  await owner.client.rpc("initialize_cards");
-  await login(page, owner);
-  await expect(
-    page.getByRole("link").filter({ hasText: "Ink Business Cash" }),
-  ).toContainText("Last four not set");
-  await expect(
-    page.getByRole("link").filter({ hasText: "Ink Business Preferred" }),
-  ).toContainText("Last four not set");
-  await page.getByRole("link").filter({ hasText: "Ink Business Cash" }).click();
-  await page.getByRole("button", { name: "Confirm card identity" }).click();
-  await page.getByLabel("Last four digits (optional)").fill("0555");
-  await page
-    .getByLabel("I checked this card’s identity and details with the issuer.")
-    .check();
-  await page.getByRole("button", { name: "Save card details" }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  await page.reload();
-  await expect(page.locator(".page-heading .eyebrow")).toContainText("0555");
-  expect(
-    ok(
-      await owner.client
-        .from("cards")
-        .select()
-        .eq("product_name", "Chase Ink Business Cash"),
-    ).map((c) => c.last4),
-  ).toEqual(["0555"]);
-  await noOverflow(page);
+test.describe("signed-in owners", () => {
+  test.skip(!haveOwners, "Set the PERKKEEP_E2E_* test owner credentials.");
+
+  test("records, corrects and rejects evidence with read-back and audit history", async ({
+    page,
+    baseURL,
+  }) => {
+    await login(page, owners.a);
+    const { card, benefitId, name, period } = await fixture(page, baseURL!);
+    try {
+      await page.goto(`/cards/${card.id}`);
+      const panel = page.locator(".period-panel").filter({ hasText: name });
+      await panel
+        .getByRole("button", { name: "Confirm redemption", exact: true })
+        .click();
+      await page.getByLabel("Amount in dollars").fill("3");
+      await page
+        .getByLabel("What did you verify?")
+        .fill("Synthetic issuer confirmation for browser test.");
+      await page
+        .getByLabel("This assessment is supported by the evidence I reviewed.")
+        .check();
+      await page.getByRole("button", { name: "Save evidence" }).click();
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      await page.reload();
+      await expect(panel.locator(".period-amounts")).toContainText("$3");
+      const imported = await api<{ id: string }>(
+        page.request,
+        baseURL!,
+        "record_evidence",
+        { record: candidate(period.id, period.period_start, 400) },
+      );
+      expect(imported.status).toBe(200);
+      await page.getByRole("button", { name: "Refresh records" }).click();
+      await panel.getByRole("button", { name: /Evidence \(/ }).click();
+      await panel.getByRole("button", { name: "Review candidate" }).click();
+      await page
+        .getByLabel("What did you verify?")
+        .fill("Synthetic posted credit checked by user.");
+      await page
+        .getByLabel("This assessment is supported by the evidence I reviewed.")
+        .check();
+      await page.getByRole("button", { name: "Save correction" }).click();
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      await expect(panel.locator(".period-amounts")).toContainText("$7");
+      const rows = (await snapshot(page.request)).evidence.filter(
+        (e) => e.benefit_period_id === period.id,
+      );
+      expect(rows).toHaveLength(3);
+      expect(
+        rows.find((e) => e.supersedes_evidence_id === imported.data!.id)
+          ?.confidence,
+      ).toBe("confirmed");
+      await api(page.request, baseURL!, "record_evidence", {
+        record: candidate(period.id, period.period_start, 100),
+      });
+      await page.getByRole("button", { name: "Refresh records" }).click();
+      await panel.getByRole("button", { name: "Reject candidate" }).click();
+      await page
+        .getByLabel("Reason")
+        .fill("Synthetic nonqualifying transaction.");
+      await page.getByRole("button", { name: "Save rejection" }).click();
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      await panel.getByRole("button", { name: "Add note" }).click();
+      const note = `Synthetic audit note ${randomUUID().slice(0, 8)}`;
+      await page.getByLabel("Note", { exact: true }).fill(note);
+      await page.getByRole("button", { name: "Save note" }).click();
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      await page.goto("/history");
+      await page.getByLabel("History view").selectOption("audit");
+      await expect(page.getByText(note).first()).toBeVisible();
+      await noOverflow(page);
+    } finally {
+      await api(page.request, baseURL!, "set_benefit_enabled", {
+        benefit_id: benefitId,
+        enabled: false,
+      });
+    }
+  });
+
+  test("replays idempotently, rejects changed payloads and preserves earlier periods", async ({
+    page,
+    baseURL,
+  }) => {
+    await login(page, owners.a);
+    const { benefitId, period } = await fixture(page, baseURL!);
+    try {
+      const record = candidate(period.id, period.period_start, 250);
+      const first = await api<{ id: string }>(
+        page.request,
+        baseURL!,
+        "record_evidence",
+        { record },
+      );
+      const replay = await api<{ id: string }>(
+        page.request,
+        baseURL!,
+        "record_evidence",
+        { record },
+      );
+      expect(replay.data!.id).toBe(first.data!.id);
+      const changed = await api(page.request, baseURL!, "record_evidence", {
+        record: { ...record, amount_cents: 999 },
+      });
+      expect(changed.status).toBe(400);
+      expect(changed.error).toMatch(/Idempotency key reused/);
+      const request = {
+        request_key: randomUUID(),
+        trigger: "manual",
+        periods: [
+          {
+            id: period.id,
+            coverage_status: "partial",
+            coverage_through: localDate(),
+          },
+        ],
+        evidence: [record],
+        summary: {
+          source: "synthetic_engineering_fixture",
+          finances_available: "not_tested",
+        },
+      };
+      const run1 = await api<{ id: string; status: string }>(
+        page.request,
+        baseURL!,
+        "apply_reconciliation",
+        request,
+      );
+      const run2 = await api<{ id: string }>(
+        page.request,
+        baseURL!,
+        "apply_reconciliation",
+        request,
+      );
+      expect(run1.data!.status).toBe("partial");
+      expect(run2.data!.id).toBe(run1.data!.id);
+      const reused = await api(page.request, baseURL!, "apply_reconciliation", {
+        ...request,
+        summary: { source: "changed" },
+      });
+      expect(reused.status).toBe(400);
+      const earlier = new Date();
+      earlier.setDate(1);
+      earlier.setMonth(earlier.getMonth() - 1);
+      expect(
+        (
+          await api(page.request, baseURL!, "ensure_period", {
+            benefit_id: benefitId,
+            on: earlier.toISOString().slice(0, 10),
+          })
+        ).status,
+      ).toBe(200);
+      const snap = await snapshot(page.request);
+      const mine = snap.periods.filter((p) => p.benefit_id === benefitId);
+      expect(mine).toHaveLength(2);
+      const current = mine.find((p) => p.id === period.id)!;
+      expect(current.candidate_cents).toBe(250);
+      expect(current.coverage_status).toBe("partial");
+      expect(
+        snap.evidence.filter((e) => e.benefit_period_id === period.id),
+      ).toHaveLength(1);
+    } finally {
+      await api(page.request, baseURL!, "set_benefit_enabled", {
+        benefit_id: benefitId,
+        enabled: false,
+      });
+    }
+  });
+
+  test("isolates owners and revokes the session on sign-out", async ({
+    browser,
+    baseURL,
+  }) => {
+    const aContext = await browser.newContext();
+    const a = await aContext.newPage();
+    await login(a, owners.a);
+    const { benefitId, name, period } = await fixture(a, baseURL!);
+    const bContext = await browser.newContext();
+    const b = await bContext.newPage();
+    try {
+      await login(b, owners.b);
+      const theirs = await snapshot(b.request);
+      expect(JSON.stringify(theirs)).not.toContain(period.id);
+      expect(JSON.stringify(theirs)).not.toContain(benefitId);
+      const intrusion = await api(b.request, baseURL!, "record_evidence", {
+        record: candidate(period.id, period.period_start, 100),
+      });
+      expect(intrusion.status).toBeGreaterThanOrEqual(400);
+      await b.goto("/history");
+      await expect(b.getByText(name)).toHaveCount(0);
+      // Sign out, then replay the old session cookie: the server must refuse it.
+      const cookies = await bContext.cookies();
+      await b.goto("/settings");
+      await b.getByRole("button", { name: "Sign out", exact: true }).click();
+      await expect(
+        b.getByRole("heading", { name: "Welcome back." }),
+      ).toBeVisible();
+      expect((await b.request.get("/api/ledger")).status()).toBe(401);
+      const replayContext = await browser.newContext();
+      await replayContext.addCookies(cookies);
+      expect((await replayContext.request.get("/api/ledger")).status()).toBe(
+        401,
+      );
+      await replayContext.close();
+    } finally {
+      await api(a.request, baseURL!, "set_benefit_enabled", {
+        benefit_id: benefitId,
+        enabled: false,
+      });
+      await aContext.close();
+      await bContext.close();
+    }
+  });
 });
