@@ -2,6 +2,47 @@
   "product": "Chase Freedom Unlimited",
   "catalog_key": "chase-freedom-unlimited",
   "issuer": "Chase",
-  "researched": false,
-  "rules": []
+  "researched": true,
+  "rules": [
+    {
+      "id": "cfu/doordash-dashpass",
+      "version": "2026-10-28",
+      "name": "Complimentary DashPass membership (6 months)",
+      "period": "custom",
+      "amount_cents": null,
+      "enrollment_required": true,
+      "eligibility_notes": "Requires a U.S. address; card must be used at checkout for DashPass-eligible orders; third-party and digital wallet payments excluded. Six months of complimentary DashPass for DoorDash and Caviar when activated for the first time between 02/01/2025 and 12/31/2029. After the free period, membership auto-renews at the then-current monthly rate until canceled. Membership value stated 'as of 10/01/2026'. Activate by December 31, 2029 by adding the Freedom Unlimited as the default payment method in DoorDash and enrolling in DashPass.",
+      "source_url": "https://creditcards.chase.com/cash-back-credit-cards/freedom/unlimited",
+      "checked_on": "2026-10-28",
+      "effective_from": "2025-02-01",
+      "effective_to": "2030-01-01",
+      "verified": true,
+      "manual": true,
+      "matching": {
+        "credit_patterns": [],
+        "purchase_patterns": ["dashpass"],
+        "patterns_verified": false
+      }
+    },
+    {
+      "id": "cfu/doordash-quarterly-promo",
+      "version": "2026-10-28",
+      "name": "DoorDash $10 off one non-restaurant order per quarter",
+      "period": "quarterly",
+      "amount_cents": 1000,
+      "enrollment_required": true,
+      "eligibility_notes": "Non-restaurant DoorDash orders (grocery, convenience, retail) placed with the enrolled card. Up to $10 off one non-restaurant DoorDash order each calendar quarter through December 31, 2029. Unused discounts do not roll over and have no cash value. Applied as a promotional discount at checkout, not a statement credit. The card used to enroll in DashPass must be used at checkout; requires active DashPass enrollment through the Chase benefit.",
+      "source_url": "https://creditcards.chase.com/cash-back-credit-cards/freedom/unlimited",
+      "checked_on": "2026-10-28",
+      "effective_from": null,
+      "effective_to": "2030-01-01",
+      "verified": true,
+      "manual": true,
+      "matching": {
+        "credit_patterns": [],
+        "purchase_patterns": ["doordash"],
+        "patterns_verified": false
+      }
+    }
+  ]
 }

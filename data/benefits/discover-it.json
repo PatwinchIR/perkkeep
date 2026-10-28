@@ -2,6 +2,27 @@
   "product": "Discover it",
   "catalog_key": "discover-it",
   "issuer": "Discover",
-  "researched": false,
-  "rules": []
+  "researched": true,
+  "rules": [
+    {
+      "id": "discover-it/quarterly-activation",
+      "version": "2026-10-28",
+      "name": "Q4 2026 5% Cashback Bonus categories: Restaurants, Entertainment, Utilities",
+      "period": "quarterly",
+      "amount_cents": null,
+      "enrollment_required": true,
+      "eligibility_notes": "Restaurants: full-service restaurants, cafes, cafeterias, fast-food locations, caterers; restaurants inside hotels or retail stores and bakeries may not qualify. Entertainment: movie theaters, sports/theatrical/concert promoters, amusement parks, tourist attractions, aquariums, zoos, dance halls, record stores, video rental, pool halls, bowling alleys; excludes golf courses, country clubs, cable and streaming services, third-party amusement park tickets. Utilities: residential electricity, natural gas, water, and phone or online purchases of internet, cable, satellite TV, and mobile or landline phone service; purchases at physical retail stores do not qualify (merchant descriptions per Doctor of Credit). 5% cash back on up to $1,500 in combined purchases in the quarter (maximum $75 cash back), then 1%; activation required and earning begins the day of activation (not retroactive to quart Unverified: discover.com calendar page could not be fetched (client error) and the alternate cashback-calendar.html rendered 'the rewards calendar is not working at this time'. Categories and dates taken from NerdWallet, corroborated by Doctor of Credit and Frequent Miler. The $1,500 cap and activa",
+      "source_url": "https://www.nerdwallet.com/credit-cards/news/discover-bonus-categories-q4-2026",
+      "checked_on": "2026-10-28",
+      "effective_from": "2026-10-01",
+      "effective_to": "2027-01-01",
+      "verified": false,
+      "manual": true,
+      "matching": {
+        "credit_patterns": [],
+        "purchase_patterns": [],
+        "patterns_verified": false
+      }
+    }
+  ]
 }

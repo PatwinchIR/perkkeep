@@ -187,6 +187,166 @@
         "patterns_verified_on": "2026-10-28",
         "observed_descriptor": "SHOPS AT CHASE $250/YEAR"
       }
+    },
+    {
+      "id": "csr/apple-tv-apple-music",
+      "version": "2026-10-28",
+      "name": "Complimentary Apple TV and Apple Music subscriptions",
+      "period": "custom",
+      "amount_cents": null,
+      "enrollment_required": true,
+      "eligibility_notes": "Subscription benefit, not a statement credit. Primary cardmember only. At least 12 months from activation. Activation must be completed by June 22, 2027. Cardmembers with a paid Apple One subscription receive an $8.00 monthly discount on Apple One instead. One-time activation on chase.com or the Chase Mobile app required by June 22, 2027. Primary cardmember only.",
+      "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+      "checked_on": "2026-10-28",
+      "effective_from": null,
+      "effective_to": "2027-06-23",
+      "verified": true,
+      "manual": true,
+      "matching": {
+        "credit_patterns": [],
+        "purchase_patterns": ["apple.com/bill", "apple tv", "apple music"],
+        "patterns_verified": false
+      }
+    },
+    {
+      "id": "csr/doordash-dashpass",
+      "version": "2026-10-28",
+      "name": "Complimentary DoorDash DashPass membership",
+      "period": "custom",
+      "amount_cents": null,
+      "enrollment_required": true,
+      "eligibility_notes": "DoorDash (U.S.). Membership runs until December 31, 2029 or for 12 months from activation, whichever is longer. Activate by December 31, 2029. Must use the enrolled Sapphire Reserve card as the payment method at DoorDash checkout. U.S. address required.",
+      "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+      "checked_on": "2026-10-28",
+      "effective_from": null,
+      "effective_to": "2030-01-01",
+      "verified": true,
+      "manual": true,
+      "matching": {
+        "credit_patterns": [],
+        "purchase_patterns": ["dashpass"],
+        "patterns_verified": false
+      }
+    },
+    {
+      "id": "csr/ihg-platinum-elite",
+      "version": "2026-10-28",
+      "name": "IHG One Rewards Platinum Elite status",
+      "period": "custom",
+      "amount_cents": null,
+      "enrollment_required": true,
+      "eligibility_notes": "Primary cardmember only; the card must remain open. Valid through 12/31/2027 while the card remains open. Link an IHG One Rewards account on chase.com or in the Chase Mobile app. Activation can take up to 3 weeks.",
+      "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+      "checked_on": "2026-10-28",
+      "effective_from": null,
+      "effective_to": "2028-01-01",
+      "verified": true,
+      "manual": true,
+      "matching": {
+        "credit_patterns": [],
+        "purchase_patterns": [],
+        "patterns_verified": false
+      }
+    },
+    {
+      "id": "csr/priority-pass-select",
+      "version": "2026-10-28",
+      "name": "Priority Pass Select lounge membership",
+      "period": "cardmember_year",
+      "amount_cents": null,
+      "enrollment_required": false,
+      "eligibility_notes": "Physical Priority Pass card or the Priority Pass digital card is required for entry; digital wallet cards are not accepted. Additional guests beyond two are charged $27 per guest per visit. Ongoing while the card is open. Chase states Priority Pass Select is automatically activated for primary cardmembers and authorized users.",
+      "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+      "checked_on": "2026-10-28",
+      "effective_from": null,
+      "effective_to": null,
+      "verified": true,
+      "manual": true,
+      "matching": {
+        "credit_patterns": [],
+        "purchase_patterns": [],
+        "patterns_verified": false
+      }
+    },
+    {
+      "id": "csr/spend-tier-southwest-credit",
+      "version": "2026-10-28",
+      "name": "$500 Southwest Airlines credit via Chase Travel ($75,000 spend tier)",
+      "period": "custom",
+      "amount_cents": 50000,
+      "enrollment_required": false,
+      "eligibility_notes": "Southwest Airlines purchases booked through Chase Travel. Any portion of a purchase covered by the credit does not earn points. Requires $75,000 in purchases on the Sapphire Reserve or J.P. Morgan Reserve card in a calendar year. Up to $500 in statement credits per qualifying period, expiring at the end of the calendar year following the qualifying year. If the cardmember qualifies in consecutive years, the most available at one time is $1,000. Applied automatically. Allow 1 to 2 weeks after reaching $75,000 for tier benefits to appear. Unlocks after $75,000 of spend (calendar year); counting rule: Purchases made with the Sapphire Reserve or J.P. Morgan Reserve card between January 1 and December 31 of each year, starting with 2025, count toward the $75,000 requirement. Balance transfers, cash advances, cash-like transactions, and fees of any kind (including the annual fee) do not count.",
+      "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+      "checked_on": "2026-10-28",
+      "effective_from": "2025-01-01",
+      "effective_to": null,
+      "verified": true,
+      "manual": false,
+      "matching": {
+        "credit_patterns": ["southwest", "chase travel credit"],
+        "purchase_patterns": [],
+        "patterns_verified": false
+      }
+    },
+    {
+      "id": "csr/spend-tier-hyatt-explorist",
+      "version": "2026-10-28",
+      "name": "World of Hyatt Explorist status ($75,000 spend tier)",
+      "period": "custom",
+      "amount_cents": null,
+      "enrollment_required": true,
+      "eligibility_notes": "Requires $75,000 in purchases on the Sapphire Reserve or J.P. Morgan Reserve card in a calendar year. Chase may remove tier benefits for misuse. Status lasts through the remainder of the qualifying calendar year, the following calendar year, and through February of the calendar year after that. Link a World of Hyatt account on chase.com or in the Chase Mobile app. Allow up to 3 weeks for activation. Allow 1 to 2 weeks after reaching $75,000 for tier benefits to appear. Unlocks after $75,000 of spend (calendar year); counting rule: Purchases made with the Sapphire Reserve or J.P. Morgan Reserve card between January 1 and December 31 of each year, starting with 2025, count toward the $75,000 requirement. Balance transfers, cash advances, cash-like transactions, and fees of any kind (including the annual fee) do not count. Returns are not addressed in the footnote. Benefits apply for the re",
+      "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+      "checked_on": "2026-10-28",
+      "effective_from": "2025-01-01",
+      "effective_to": null,
+      "verified": true,
+      "manual": true,
+      "matching": {
+        "credit_patterns": [],
+        "purchase_patterns": [],
+        "patterns_verified": false
+      }
+    },
+    {
+      "id": "csr/spend-tier-ihg-diamond",
+      "version": "2026-10-28",
+      "name": "IHG One Rewards Diamond Elite status ($75,000 spend tier)",
+      "period": "custom",
+      "amount_cents": null,
+      "enrollment_required": true,
+      "eligibility_notes": "Requires $75,000 in purchases on the Sapphire Reserve or J.P. Morgan Reserve card in a calendar year. Chase may remove tier benefits for misuse. Status lasts through the remainder of the qualifying calendar year and the following calendar year. Link an IHG One Rewards account; if Platinum Elite status is already active through the card, Diamond Elite activates automatically. Allow 1 to 2 weeks after reaching $75,000 for tier benefits to appear. Unlocks after $75,000 of spend (calendar year); counting rule: Purchases made with the Sapphire Reserve or J.P. Morgan Reserve card between January 1 and December 31 of each year, starting with 2025, count toward the $75,000 requirement. Balance transfers, cash advances, cash-like transactions, and fees of any kind (including the annual fee) do not count. Returns are not addressed in the footnote. Benefits apply for the remainder of the calendar y",
+      "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+      "checked_on": "2026-10-28",
+      "effective_from": "2025-01-01",
+      "effective_to": null,
+      "verified": true,
+      "manual": true,
+      "matching": {
+        "credit_patterns": [],
+        "purchase_patterns": [],
+        "patterns_verified": false
+      }
+    },
+    {
+      "id": "csr/spend-tier-southwest-a-list",
+      "version": "2026-10-28",
+      "name": "Southwest Airlines A-List status ($75,000 spend tier)",
+      "period": "custom",
+      "amount_cents": null,
+      "enrollment_required": true,
+      "eligibility_notes": "Requires $75,000 in purchases on the Sapphire Reserve or J.P. Morgan Reserve card in a calendar year. Chase may remove tier benefits for misuse. Status lasts through December 31 of the calendar year following the qualifying year. Link a Southwest Rapid Rewards membership number. Allow 10 to 15 business days for activation. Allow 1 to 2 weeks after reaching $75,000 for tier benefits to appear. Unlocks after $75,000 of spend (calendar year); counting rule: Purchases made with the Sapphire Reserve or J.P. Morgan Reserve card between January 1 and December 31 of each year, starting with 2025, count toward the $75,000 requirement. Balance transfers, cash advances, cash-like transactions, and fees of any kind (including the annual fee) do not count. Returns are not addressed in the footnote. Benefits apply for the remainder of the calendar year in which the cardmember qualifies and continue th",
+      "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+      "checked_on": "2026-10-28",
+      "effective_from": "2025-01-01",
+      "effective_to": null,
+      "verified": true,
+      "manual": true,
+      "matching": {
+        "credit_patterns": [],
+        "purchase_patterns": [],
+        "patterns_verified": false
+      }
     }
   ]
 }

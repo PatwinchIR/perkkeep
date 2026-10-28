@@ -2,6 +2,49 @@
   "product": "Chase Ink Business Preferred",
   "catalog_key": "chase-ink-business-preferred",
   "issuer": "Chase",
-  "researched": false,
-  "rules": []
+  "researched": true,
+  "rules": [
+    {
+      "id": "ink-preferred/welcome-offer",
+      "version": "2026-10-28",
+      "name": "New cardmember bonus: 100,000 bonus points",
+      "period": "one_time",
+      "amount_cents": null,
+      "enrollment_required": false,
+      "eligibility_notes": "Spend $8,000 on purchases within 3 months of account opening. Page states the bonus may be unavailable to applicants who have ever held this card. Earn 100,000 bonus points after spending $8,000 on purchases in the first 3 months after account opening. Bonus posts 6 to 8 weeks after qualifying. This is the offer visible on the issuer page on 2026-10-28; the offer that applies to a recently approved account is the one shown at the time of application, so the owner should confirm the threshold and window on the approval terms. The page states a spend threshold ($8,000) and a window (3 months from account opening). Unlocks after $8,000 of spend (first 3 months after account opening); counting rule: purchases, as stated in terms",
+      "source_url": "https://creditcards.chase.com/business-credit-cards/ink/business-preferred",
+      "checked_on": "2026-10-28",
+      "effective_from": null,
+      "effective_to": null,
+      "verified": true,
+      "manual": true,
+      "matching": {
+        "credit_patterns": [],
+        "purchase_patterns": [],
+        "patterns_verified": false
+      },
+      "units": 100000,
+      "unit_label": "points"
+    },
+    {
+      "id": "ink-preferred/doordash-promo",
+      "version": "2026-10-28",
+      "name": "DoorDash DashPass complimentary membership (12 months minimum) with up to $10 monthly off non-restaurant orders",
+      "period": "monthly",
+      "amount_cents": 1000,
+      "enrollment_required": true,
+      "eligibility_notes": "DoorDash orders while DashPass is active with the card; the $10 monthly discount applies to non-restaurant orders. Complimentary DashPass for at least 12 months when activated by 2027-12-31; includes $0 delivery fees and reduced service fees, plus up to $10 monthly off non-restaurant DoorDash orders. The page does not say whether unused monthly amounts roll over. Activate DashPass with the card by 2027-12-31.",
+      "source_url": "https://creditcards.chase.com/business-credit-cards/ink/business-preferred",
+      "checked_on": "2026-10-28",
+      "effective_from": null,
+      "effective_to": "2028-01-01",
+      "verified": true,
+      "manual": true,
+      "matching": {
+        "credit_patterns": [],
+        "purchase_patterns": ["doordash", "dashpass"],
+        "patterns_verified": false
+      }
+    }
+  ]
 }

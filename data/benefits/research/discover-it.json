@@ -1,0 +1,255 @@
+{
+  "card": {
+    "issuer": "Discover",
+    "product": "Discover it Cash Back Credit Card",
+    "network": "Discover",
+    "annual_fee_cents": 0,
+    "product_version_note": "Assumed variant: Discover it Cash Back (the it-card.html page names the product 'Discover it Cash Back Credit Card' and describes the 5% rotating-category program; it does not mention the Chrome, Miles, or Student variants, which have different earn structures). Discover's member-benefits page states that Discover Bank has merged into Capital One, N.A., and that some content may not apply to every card; Frequent Miler reports that some Discover it accounts have moved to Capital One servicing, where 5% activation is reached via the Capital One login (Rewards & Benefits > View Rewards). The discover.com 5% calendar page returned a client error on fetch and the alternate cashback-calendar.html loaded but displayed 'the rewards calendar is not working at this time', so quarterly category lists come from secondary sources and are marked verified false; the cap, activation requirement, base rate, Cashback Match, and welcome bonus were read on discover.com.",
+    "sources": [
+      {
+        "url": "https://www.discover.com/credit-cards/cash-back/it-card.html",
+        "title": "Discover it Cash Back Credit Card",
+        "read_date": "2026-10-28",
+        "kind": "product_page"
+      },
+      {
+        "url": "https://www.discover.com/credit-cards/cash-back/",
+        "title": "Discover Cash Back Credit Cards",
+        "read_date": "2026-10-28",
+        "kind": "product_page"
+      },
+      {
+        "url": "https://www.discover.com/credit-cards/cash-back/cashback-calendar.html",
+        "title": "Discover 5% Cashback Calendar (calendar widget failed to render; static text only)",
+        "read_date": "2026-10-28",
+        "kind": "benefits_page"
+      },
+      {
+        "url": "https://www.discover.com/credit-cards/member-benefits/",
+        "title": "Discover Card Member Benefits",
+        "read_date": "2026-10-28",
+        "kind": "benefits_page"
+      },
+      {
+        "url": "https://www.nerdwallet.com/credit-cards/news/discover-bonus-categories-q4-2026",
+        "title": "NerdWallet: Discover 5% Bonus Categories, Q4 2026: Entertainment, Restaurants, Utilities",
+        "read_date": "2026-10-28",
+        "kind": "secondary"
+      },
+      {
+        "url": "https://www.doctorofcredit.com/discover-q4-2026-5-categories-utilities-restaurants-entertainment/",
+        "title": "Doctor of Credit: Discover Q4 2026 5% Categories: Utilities, Restaurants, Entertainment",
+        "read_date": "2026-10-28",
+        "kind": "secondary"
+      },
+      {
+        "url": "https://frequentmiler.com/?p=295779",
+        "title": "Frequent Miler: Q4 2026 rotating 5% categories now live",
+        "read_date": "2026-10-28",
+        "kind": "secondary"
+      },
+      {
+        "url": "https://awardwallet.com/news/cash-back/discover-cashback-calendar/",
+        "title": "AwardWallet: Discover Cashback Calendar",
+        "read_date": "2026-10-28",
+        "kind": "secondary"
+      }
+    ]
+  },
+  "benefits": [
+    {
+      "id": "cashback-match-first-year",
+      "name": "Cashback Match",
+      "type": "other",
+      "amount_cents": null,
+      "units": null,
+      "period_type": "one_time",
+      "period_note": "Unlimited dollar-for-dollar match of all cash back earned from the day the new account is approved through the first 365 days; credited automatically within two billing periods after the match period ends",
+      "enrollment_required": false,
+      "enrollment_note": "Automatic; no sign-up required",
+      "qualifying_merchants_or_rules": "Excludes rewards processed after the match period, statement credits, rewards transfers from Discover or Capital One deposit accounts, and rewards on closed accounts. New cardmembers only.",
+      "credit_descriptor_hint": null,
+      "unlock": null,
+      "effective_date": null,
+      "end_date": null,
+      "source_url": "https://www.discover.com/credit-cards/cash-back/it-card.html",
+      "verified": true,
+      "verification_note": "Read on discover.com 2026-10-28"
+    },
+    {
+      "id": "welcome-statement-credit-200",
+      "name": "$200 bonus statement credit",
+      "type": "statement_credit",
+      "amount_cents": 20000,
+      "units": null,
+      "period_type": "one_time",
+      "period_note": "Earn a $200 bonus statement credit when you spend $500 in the first 3 months",
+      "enrollment_required": false,
+      "enrollment_note": "",
+      "qualifying_merchants_or_rules": "New cardmember welcome offer visible on the issuer product page; shown alongside Cashback Match",
+      "credit_descriptor_hint": null,
+      "unlock": {
+        "metric": "card_spend_cents",
+        "threshold_cents": 50000,
+        "window": "first 3 months from account opening",
+        "counting_rule": "as stated in terms"
+      },
+      "effective_date": null,
+      "end_date": null,
+      "source_url": "https://www.discover.com/credit-cards/cash-back/it-card.html",
+      "verified": true,
+      "verification_note": "Read on discover.com 2026-10-28"
+    },
+    {
+      "id": "q4-2026-rotating-5pct-categories",
+      "name": "Q4 2026 5% Cashback Bonus categories: Restaurants, Entertainment, Utilities",
+      "type": "other",
+      "amount_cents": null,
+      "units": null,
+      "period_type": "quarterly",
+      "period_note": "5% cash back on up to $1,500 in combined purchases in the quarter (maximum $75 cash back), then 1%; activation required and earning begins the day of activation (not retroactive to quarter start, per AwardWallet)",
+      "enrollment_required": true,
+      "enrollment_note": "Activate via the Discover cashback calendar or Discover app; for accounts moved to Capital One, log in, select the card, go to Rewards & Benefits > View Rewards, then the 5% calendar (per Frequent Miler). NerdWallet reports activation opened as early as Sept 1, 2026.",
+      "qualifying_merchants_or_rules": "Restaurants: full-service restaurants, cafes, cafeterias, fast-food locations, caterers; restaurants inside hotels or retail stores and bakeries may not qualify. Entertainment: movie theaters, sports/theatrical/concert promoters, amusement parks, tourist attractions, aquariums, zoos, dance halls, record stores, video rental, pool halls, bowling alleys; excludes golf courses, country clubs, cable and streaming services, third-party amusement park tickets. Utilities: residential electricity, natural gas, water, and phone or online purchases of internet, cable, satellite TV, and mobile or landline phone service; purchases at physical retail stores do not qualify (merchant descriptions per Doctor of Credit).",
+      "credit_descriptor_hint": null,
+      "unlock": null,
+      "effective_date": "2026-10-01",
+      "end_date": "2026-12-31",
+      "source_url": "https://www.nerdwallet.com/credit-cards/news/discover-bonus-categories-q4-2026",
+      "verified": false,
+      "verification_note": "discover.com calendar page could not be fetched (client error) and the alternate cashback-calendar.html rendered 'the rewards calendar is not working at this time'. Categories and dates taken from NerdWallet, corroborated by Doctor of Credit and Frequent Miler. The $1,500 cap and activation requirement themselves were confirmed on discover.com."
+    },
+    {
+      "id": "zero-fraud-liability",
+      "name": "$0 Fraud Liability",
+      "type": "protection",
+      "amount_cents": null,
+      "units": null,
+      "period_type": "custom",
+      "period_note": "Cardmember is never responsible for unauthorized purchases on the Discover Card account, subject to investigation",
+      "enrollment_required": false,
+      "enrollment_note": "",
+      "qualifying_merchants_or_rules": "An unauthorized purchase is one where the cardmember did not give card information to someone else for a charge",
+      "credit_descriptor_hint": null,
+      "unlock": null,
+      "effective_date": null,
+      "end_date": null,
+      "source_url": "https://www.discover.com/credit-cards/member-benefits/",
+      "verified": true,
+      "verification_note": "Read on discover.com 2026-10-28"
+    },
+    {
+      "id": "freeze-it-card-lock",
+      "name": "Freeze it (card lock)",
+      "type": "protection",
+      "amount_cents": null,
+      "units": null,
+      "period_type": "custom",
+      "period_note": "Freeze the account in seconds with an on/off switch in the app or website; blocks new purchases and cash advances, while recurring merchant charges, payments, and returns may continue",
+      "enrollment_required": false,
+      "enrollment_note": "",
+      "qualifying_merchants_or_rules": "",
+      "credit_descriptor_hint": null,
+      "unlock": null,
+      "effective_date": null,
+      "end_date": null,
+      "source_url": "https://www.discover.com/credit-cards/member-benefits/",
+      "verified": true,
+      "verification_note": "Read on discover.com 2026-10-28; the it-card.html page describes the same feature as 'Lock your card in the mobile app'"
+    },
+    {
+      "id": "free-fico-credit-score",
+      "name": "Free FICO Credit Score",
+      "type": "other",
+      "amount_cents": null,
+      "units": null,
+      "period_type": "custom",
+      "period_note": "Free FICO Credit Score plus score details, based on TransUnion data, for primary account holders; the it-card.html page frames this as a FICO Score 8 via CreditWise. Discover notes the benefit may change or end in the future.",
+      "enrollment_required": false,
+      "enrollment_note": "",
+      "qualifying_merchants_or_rules": "",
+      "credit_descriptor_hint": null,
+      "unlock": null,
+      "effective_date": null,
+      "end_date": null,
+      "source_url": "https://www.discover.com/credit-cards/member-benefits/",
+      "verified": true,
+      "verification_note": "Read on discover.com 2026-10-28"
+    },
+    {
+      "id": "ssn-dark-web-alerts",
+      "name": "Social Security Number alerts",
+      "type": "other",
+      "amount_cents": null,
+      "units": null,
+      "period_type": "custom",
+      "period_note": "Alert if the cardmember's Social Security Number is found on the dark web; free, online-only monitoring of the Experian credit report and dark web for primary cardmembers who opt in. Discover notes the benefit may change or end in the future.",
+      "enrollment_required": true,
+      "enrollment_note": "Primary cardmember must opt in",
+      "qualifying_merchants_or_rules": "",
+      "credit_descriptor_hint": null,
+      "unlock": null,
+      "effective_date": null,
+      "end_date": null,
+      "source_url": "https://www.discover.com/credit-cards/member-benefits/",
+      "verified": true,
+      "verification_note": "Read on discover.com 2026-10-28"
+    }
+  ],
+  "earn_rates": [
+    {
+      "category": "Rotating quarterly 5% Cashback Bonus categories (activation required; current Q4 2026: Restaurants, Entertainment, Utilities, Oct 1 to Dec 31, 2026)",
+      "rate": "5% cash back",
+      "cap": "$1,500 in purchases per quarter (maximum $75 cash back per quarter), then 1%",
+      "period_type": "quarterly",
+      "rotating": true,
+      "source_url": "https://www.discover.com/credit-cards/cash-back/cashback-calendar.html",
+      "verified": true
+    },
+    {
+      "category": "All other purchases",
+      "rate": "1% cash back",
+      "cap": null,
+      "period_type": "custom",
+      "rotating": false,
+      "source_url": "https://www.discover.com/credit-cards/cash-back/it-card.html",
+      "verified": true
+    },
+    {
+      "category": "Q1 2026 (Jan 1 to Mar 31): Grocery Stores, Wholesale Clubs, Select Streaming Services",
+      "rate": "5% cash back",
+      "cap": "$1,500 in purchases per quarter",
+      "period_type": "quarterly",
+      "rotating": true,
+      "source_url": "https://www.nerdwallet.com/credit-cards/news/discover-bonus-categories-q4-2026",
+      "verified": false
+    },
+    {
+      "category": "Q2 2026 (Apr 1 to Jun 30): Restaurants, Home Improvement Stores",
+      "rate": "5% cash back",
+      "cap": "$1,500 in purchases per quarter",
+      "period_type": "quarterly",
+      "rotating": true,
+      "source_url": "https://www.nerdwallet.com/credit-cards/news/discover-bonus-categories-q4-2026",
+      "verified": false
+    },
+    {
+      "category": "Q3 2026 (Jul 1 to Sep 30): Gas Stations and EV Charging, Airlines and Public Transportation, Drugstores",
+      "rate": "5% cash back",
+      "cap": "$1,500 in purchases per quarter",
+      "period_type": "quarterly",
+      "rotating": true,
+      "source_url": "https://www.nerdwallet.com/credit-cards/news/discover-bonus-categories-q4-2026",
+      "verified": false
+    },
+    {
+      "category": "Q4 2026 (Oct 1 to Dec 31): Restaurants, Entertainment, Utilities",
+      "rate": "5% cash back",
+      "cap": "$1,500 in purchases per quarter",
+      "period_type": "quarterly",
+      "rotating": true,
+      "source_url": "https://www.nerdwallet.com/credit-cards/news/discover-bonus-categories-q4-2026",
+      "verified": false
+    }
+  ]
+}
