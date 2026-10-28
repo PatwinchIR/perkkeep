@@ -26,6 +26,19 @@ if (env.VERCEL_ENV === "production") {
 }
 const config: NextConfig = {
   poweredByHeader: false,
+  // Official issuer card art only (see src/lib/card-art.ts). Images are fetched by
+  // the server-side optimizer, so browsers never contact the issuers directly.
+  images: {
+    remotePatterns: [
+      new URL(
+        "https://creditcards.chase.com/content/dam/jpmc-marketplace/card-art/**",
+      ),
+      new URL(
+        "https://icm.aexp-static.com/Internet/Acquisition/US_en/AppContent/OneSite/category/cardarts/**",
+      ),
+      new URL("https://ecm.capitalone.com/WCM/dfs-card/images/**"),
+    ],
+  },
   devIndicators: false,
   async headers() {
     return [

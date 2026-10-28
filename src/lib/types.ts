@@ -26,6 +26,7 @@ export type Period = Database["public"]["Tables"]["benefit_periods"]["Row"] & {
   remaining_units: number | null;
   unresolved_count: number;
   negative_balance: boolean;
+  card_archived_at: string | null;
 };
 export type Snapshot = {
   cards: Card[];

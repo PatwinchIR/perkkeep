@@ -14,8 +14,9 @@ import {
   SlidersHorizontal,
   WalletCards,
 } from "lucide-react";
-import { useApp } from "./provider";
-import { CardTile, Empty, PageHeading } from "./ui";
+import { useActive, useApp } from "./provider";
+import { CardArt, CardTile, Dialog, Empty, PageHeading } from "./ui";
+import { cardDesign } from "@/lib/card-art";
 import { PeriodPanel } from "./period-panel";
 import {
   BenefitForm,
@@ -39,13 +40,14 @@ import type { Benefit } from "@/lib/types";
 
 export function Dashboard() {
   const { data, ledger, refresh, notice, offline } = useApp(),
+    active = useActive(),
     [issuer, setIssuer] = useState("all"),
     [cardFilter, setCardFilter] = useState("all"),
     [cadence, setCadence] = useState("all"),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const today = localDate(),
-    current = data.periods.filter(
+    current = active.periods.filter(
       (p) =>
         activePeriod(
           p,
@@ -81,7 +83,7 @@ export function Dashboard() {
     review = filtered.filter(
       (p) => status(p) === "needs_review" || status(p) === "candidate",
     );
-  const cards = data.cards.filter(
+  const cards = active.cards.filter(
     (c) =>
       (issuer === "all" || c.issuer === issuer) &&
       (cardFilter === "all" || c.id === cardFilter) &&
@@ -170,7 +172,7 @@ export function Dashboard() {
           <SlidersHorizontal size={18} />
           <strong>
             {review.length +
-              data.cards.filter((c) => !c.identity_verified_at).length}{" "}
+              active.cards.filter((c) => !c.identity_verified_at).length}{" "}
             need a closer look
           </strong>
           <span>Details or evidence to review</span>
@@ -181,7 +183,7 @@ export function Dashboard() {
         <div>
           <span className="eyebrow">THE EVERYDAY COLLECTION</span>
           <h2>
-            Your cards <span className="count">{data.cards.length}</span>
+            Your cards <span className="count">{active.cards.length}</span>
           </h2>
         </div>
         <Link href="/cards">
@@ -197,7 +199,7 @@ export function Dashboard() {
             onChange={(e) => setIssuer(e.target.value)}
           >
             <option value="all">All issuers</option>
-            {Array.from(new Set(data.cards.map((c) => c.issuer))).map((i) => (
+            {Array.from(new Set(active.cards.map((c) => c.issuer))).map((i) => (
               <option key={i}>{i}</option>
             ))}
           </select>
@@ -210,7 +212,7 @@ export function Dashboard() {
             onChange={(e) => setCardFilter(e.target.value)}
           >
             <option value="all">All cards</option>
-            {data.cards.map((c) => (
+            {active.cards.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.display_name} · {cardEnding(c.last4)}
               </option>
@@ -313,7 +315,8 @@ export function Dashboard() {
 }
 
 export function CardsScreen() {
-  const { data } = useApp();
+  const { data } = useApp(),
+    active = useActive();
   return (
     <>
       <PageHeading
@@ -321,13 +324,13 @@ export function CardsScreen() {
         title="Every card has a story."
         description="Confirm the details, then keep track of what comes with them."
       />
-      {data.cards.length ? (
+      {active.cards.length ? (
         <div className="cards-grid">
-          {data.cards.map((c) => (
+          {active.cards.map((c) => (
             <CardTile
               key={c.id}
               card={c}
-              periods={data.periods.filter(
+              periods={active.periods.filter(
                 (p) =>
                   p.card_id === c.id &&
                   activePeriod(
@@ -356,7 +359,7 @@ export function CardsScreen() {
 
 export function CardScreen({ id }: { id: string }) {
   const { data, ledger, refresh, notice, offline } = useApp(),
-    [modal, setModal] = useState<"card" | "benefit" | null>(null),
+    [modal, setModal] = useState<"card" | "benefit" | "remove" | null>(null),
     [previous, setPrevious] = useState<Benefit | undefined>(),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
@@ -379,6 +382,26 @@ export function CardScreen({ id }: { id: string }) {
           benefits.find((b) => b.id === p.benefit_id),
         ),
     );
+  async function setArchived(remove: boolean) {
+    setBusy(true);
+    setError("");
+    try {
+      await ledger.run(remove ? "archive_card" : "restore_card", {
+        id: card!.id,
+      });
+      await refresh();
+      setModal(null);
+      notice(
+        remove
+          ? "Card removed. Its history stays in History; restore it from Settings."
+          : "Card restored with its full history.",
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unable to update the card.");
+    } finally {
+      setBusy(false);
+    }
+  }
   async function historical(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
@@ -440,7 +463,32 @@ export function CardScreen({ id }: { id: string }) {
           </button>
         }
       />
-      {!card.identity_verified_at && (
+      {cardDesign(card) && (
+        <figure className="card-hero">
+          <CardArt card={card} sizes="320px" />
+          <figcaption>
+            {card.issuer}’s product image. Your physical card’s design may
+            differ.
+          </figcaption>
+        </figure>
+      )}
+      {card.archived_at && (
+        <div className="notice">
+          <strong>This card was removed.</strong>
+          <p>
+            It is hidden from your overview and totals and opens no new periods.
+            Its history is kept. Restore it to track it again.
+          </p>
+          <button
+            className="secondary"
+            disabled={busy || offline}
+            onClick={() => void setArchived(false)}
+          >
+            Restore card
+          </button>
+        </div>
+      )}
+      {!card.identity_verified_at && !card.archived_at && (
         <div className="notice">
           <strong>First, make sure this is the right card.</strong>
           <p>
@@ -454,7 +502,10 @@ export function CardScreen({ id }: { id: string }) {
         <button
           className="primary"
           disabled={
-            !card.identity_verified_at || card.status !== "active" || offline
+            !card.identity_verified_at ||
+            card.status !== "active" ||
+            !!card.archived_at ||
+            offline
           }
           onClick={() => {
             setPrevious(undefined);
@@ -572,6 +623,39 @@ export function CardScreen({ id }: { id: string }) {
           ))}
         </div>
       )}
+      {!card.archived_at && (
+        <div className="settings-signout">
+          <button
+            className="text-button"
+            disabled={busy || offline}
+            onClick={() => setModal("remove")}
+          >
+            Remove this card
+          </button>
+        </div>
+      )}
+      {modal === "remove" && (
+        <Dialog title="Remove this card?" onClose={() => setModal(null)}>
+          <p className="dialog-intro">
+            {card.display_name} will leave your overview, card list and totals,
+            and no new benefit periods will open. Nothing is deleted: its
+            periods, evidence and audit history stay in History, and you can
+            restore it from Settings.
+          </p>
+          {error && (
+            <p role="alert" className="form-error">
+              {error}
+            </p>
+          )}
+          <button
+            className="primary"
+            disabled={busy || offline}
+            onClick={() => void setArchived(true)}
+          >
+            {busy ? "Removing…" : "Remove card"}
+          </button>
+        </Dialog>
+      )}
       {modal === "card" && (
         <CardForm card={card} onClose={() => setModal(null)} />
       )}{" "}
@@ -588,8 +672,9 @@ export function CardScreen({ id }: { id: string }) {
 
 export function ReviewScreen() {
   const { data } = useApp(),
+    active = useActive(),
     today = localDate();
-  const periods = data.periods
+  const periods = active.periods
     .filter(
       (p) =>
         activePeriod(
@@ -605,7 +690,7 @@ export function ReviewScreen() {
             p.period_end_exclusive <= shiftDays(today, 15))),
     )
     .sort(sortReview);
-  const unverified = data.cards.filter((c) => !c.identity_verified_at);
+  const unverified = active.cards.filter((c) => !c.identity_verified_at);
   return (
     <>
       <PageHeading
@@ -686,6 +771,7 @@ export function HistoryScreen() {
           {data.cards.map((c) => (
             <option key={c.id} value={c.id}>
               {c.display_name} · {cardEnding(c.last4)}
+              {c.archived_at ? " (removed)" : ""}
             </option>
           ))}
         </select>
@@ -821,10 +907,21 @@ export function HistoryScreen() {
 }
 
 export function SettingsScreen() {
-  const { data, notice, signOut } = useApp(),
+  const { data, ledger, refresh, notice, offline, signOut } = useApp(),
+    active = useActive(),
+    removed = data.cards.filter((c) => c.archived_at),
     [coverage, setCoverage] = useState(false),
     [exchange, setExchange] = useState(false),
     [error, setError] = useState("");
+  async function restore(id: string) {
+    try {
+      await ledger.run("restore_card", { id });
+      await refresh();
+      notice("Card restored with its full history.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unable to restore the card.");
+    }
+  }
   async function signout() {
     try {
       await signOut();
@@ -854,14 +951,14 @@ export function SettingsScreen() {
           <span className="badge needs_review">Manual reconciliation</span>
           <button
             className="primary"
-            disabled={!data.periods.length}
+            disabled={!active.periods.length}
             onClick={() => setCoverage(true)}
           >
             Record a manual reconciliation
           </button>
           <button
             className="secondary"
-            disabled={!data.periods.length}
+            disabled={!active.periods.length}
             onClick={() => setExchange(true)}
           >
             Exchange with a transaction reviewer
@@ -886,6 +983,31 @@ export function SettingsScreen() {
           </p>
         </section>
       </div>
+      {removed.length > 0 && (
+        <section className="settings-card">
+          <h2>Removed cards</h2>
+          <p>
+            Removed cards are hidden from your overview and totals. Their
+            periods, evidence and audit history stay in History.
+          </p>
+          <ul className="removed-cards">
+            {removed.map((c) => (
+              <li key={c.id}>
+                <span>
+                  {c.display_name} · {cardEnding(c.last4)}
+                </span>
+                <button
+                  className="secondary"
+                  disabled={offline}
+                  onClick={() => void restore(c.id)}
+                >
+                  Restore
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <div className="section-heading">
         <h2>Reconciliation log</h2>
       </div>
@@ -939,13 +1061,13 @@ export function SettingsScreen() {
       </div>
       {exchange && (
         <ReconciliationExchange
-          periods={data.periods}
+          periods={active.periods}
           onClose={() => setExchange(false)}
         />
       )}
       {coverage && (
         <CoverageForm
-          periods={data.periods}
+          periods={active.periods}
           onClose={() => setCoverage(false)}
         />
       )}

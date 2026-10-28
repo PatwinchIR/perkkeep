@@ -5,6 +5,7 @@ import type { OperationInput } from "@/lib/ledger-ops";
 type Terms = OperationInput<"version_benefit">["changes"];
 type EvidenceInput = OperationInput<"record_evidence">["record"];
 import { CATALOG } from "@/lib/catalog";
+import { cardDesigns } from "@/lib/card-art";
 import { CADENCES, localDate, parseCents, cardEnding } from "@/lib/domain";
 import { useApp } from "./provider";
 import { Dialog } from "./ui";
@@ -40,7 +41,8 @@ export function CardForm({
 }) {
   const { ledger, refresh, notice, offline } = useApp(),
     [error, setError] = useState(""),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    designs = cardDesigns(card.product_name);
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
@@ -55,6 +57,7 @@ export function CardForm({
         status: text(f, "status") as "active" | "closed" | "unknown",
         cardmember_anchor_date: text(f, "anchor") || null,
         issuer_timezone: text(f, "timezone"),
+        art_design: text(f, "design") || null,
       });
       await refresh();
       notice("Card details confirmed.");
@@ -131,6 +134,21 @@ export function CardForm({
             list="timezones"
           />
         </label>
+        {designs.length > 1 && (
+          <label>
+            Card design shown
+            <select
+              name="design"
+              defaultValue={card.art_design ?? designs[0].id}
+            >
+              {designs.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <datalist id="timezones">
           <option value="America/New_York" />
           <option value="America/Chicago" />

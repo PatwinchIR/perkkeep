@@ -1994,3 +1994,53 @@ dialog::backdrop {
 .welcome-copy p {
   color: #596650;
 }
+
+/* Official issuer card art. */
+.card-face.art {
+  padding: 0;
+  min-height: 0;
+  background: transparent;
+  overflow: visible;
+}
+.card-face.art:after {
+  display: none;
+}
+.card-art-image,
+.card-art-crop {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+}
+.card-art-crop {
+  position: relative;
+  overflow: hidden;
+}
+.card-tile-name {
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.3px;
+}
+.card-hero {
+  max-width: 320px;
+  margin: 0 0 24px;
+}
+.card-hero figcaption {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.removed-cards {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.removed-cards li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}

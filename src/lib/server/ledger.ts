@@ -49,6 +49,7 @@ export async function loadSnapshot(c: Client): Promise<Snapshot> {
     if (
       !b.enabled ||
       card?.status !== "active" ||
+      card.archived_at ||
       b.effective_from > today ||
       (b.effective_to && b.effective_to <= today)
     )
@@ -122,7 +123,8 @@ const handlers: {
     one(
       c,
       `update public.cards set display_name=$2, product_name=$3, last4=$4, status=$5,
-         cardmember_anchor_date=$6, issuer_timezone=$7, identity_verified_at=now()
+         cardmember_anchor_date=$6, issuer_timezone=$7, identity_verified_at=now(),
+         art_design=coalesce($8, art_design)
        where id=$1 returning to_jsonb(cards.*) as r`,
       [
         i.id,
@@ -132,7 +134,20 @@ const handlers: {
         i.status,
         i.cardmember_anchor_date,
         i.issuer_timezone,
+        i.art_design ?? null,
       ],
+    ),
+  archive_card: (c, i) =>
+    one(
+      c,
+      "update public.cards set archived_at=now() where id=$1 and archived_at is null returning to_jsonb(cards.*) as r",
+      [i.id],
+    ),
+  restore_card: (c, i) =>
+    one(
+      c,
+      "update public.cards set archived_at=null where id=$1 and archived_at is not null returning to_jsonb(cards.*) as r",
+      [i.id],
     ),
   create_benefit: (c, i) =>
     one(

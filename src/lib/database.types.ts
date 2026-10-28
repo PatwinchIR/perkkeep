@@ -201,6 +201,8 @@ export type Database = {
       };
       cards: {
         Row: {
+          archived_at: string | null;
+          art_design: string | null;
           cardmember_anchor_date: string | null;
           catalog_key: string | null;
           created_at: string;
@@ -217,6 +219,8 @@ export type Database = {
         };
         ComputedFields: never;
         Insert: {
+          archived_at?: string | null;
+          art_design?: string | null;
           cardmember_anchor_date?: string | null;
           catalog_key?: string | null;
           created_at?: string;
@@ -232,6 +236,8 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          archived_at?: string | null;
+          art_design?: string | null;
           cardmember_anchor_date?: string | null;
           catalog_key?: string | null;
           created_at?: string;

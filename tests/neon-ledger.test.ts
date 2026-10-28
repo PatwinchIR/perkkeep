@@ -735,4 +735,68 @@ suite("Neon server ledger → restricted role → PostgreSQL RLS", () => {
       }),
     ).rejects.toThrow(/timezone/);
   });
+
+  it("removes a card by archiving it: history stays, new periods stop, restore is owner-only", async () => {
+    const { card, benefit, period } = await fixture(alice);
+    await run(alice, "record_evidence", { record: event(period.id) });
+    await expect(run(bob, "archive_card", { id: card.id })).rejects.toThrow(
+      /unavailable/,
+    );
+    await run(alice, "archive_card", { id: card.id });
+    await expect(run(alice, "archive_card", { id: card.id })).rejects.toThrow(
+      /unavailable/,
+    );
+    let snap = await snapshot(alice);
+    expect(snap.cards.find((c) => c.id === card.id)?.archived_at).toBeTruthy();
+    const kept = snap.periods.find((p) => p.id === period.id)!;
+    expect([kept.candidate_cents, !!kept.card_archived_at]).toEqual([
+      500,
+      true,
+    ]);
+    expect(
+      snap.evidence.filter((e) => e.benefit_period_id === period.id),
+    ).toHaveLength(1);
+    expect(snap.periodErrors).toEqual([]);
+    await expect(
+      run(alice, "ensure_period", { benefit_id: benefit.id, on: "2026-11-02" }),
+    ).rejects.toThrow(/removed/);
+    await expect(run(bob, "restore_card", { id: card.id })).rejects.toThrow(
+      /unavailable/,
+    );
+    await run(alice, "restore_card", { id: card.id });
+    await run(alice, "ensure_period", {
+      benefit_id: benefit.id,
+      on: "2026-11-02",
+    });
+    snap = await snapshot(alice);
+    expect(snap.cards.find((c) => c.id === card.id)?.archived_at).toBeNull();
+    expect(
+      snap.audit.filter((a) => a.entity_id === card.id && a.action === "UPDATE")
+        .length,
+    ).toBeGreaterThanOrEqual(3);
+  });
+
+  it("stores a validated card design choice", async () => {
+    await run(alice, "initialize_cards", {});
+    const discover = (await snapshot(alice)).cards.find(
+      (c) => c.catalog_key === "discover-it",
+    )!;
+    const base = {
+      id: discover.id,
+      display_name: discover.display_name,
+      product_name: discover.product_name,
+      last4: null,
+      status: "unknown",
+      cardmember_anchor_date: null,
+      issuer_timezone: "America/New_York",
+    };
+    await run(alice, "update_card", { ...base, art_design: "gold" });
+    expect(
+      (await snapshot(alice)).cards.find((c) => c.id === discover.id)
+        ?.art_design,
+    ).toBe("gold");
+    await expect(
+      run(alice, "update_card", { ...base, art_design: "<script>" }),
+    ).rejects.toThrow(/Invalid/);
+  });
 });

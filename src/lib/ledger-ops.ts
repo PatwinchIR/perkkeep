@@ -127,8 +127,15 @@ export const operations = {
       status: z.enum(["active", "closed", "unknown"]),
       cardmember_anchor_date: day.nullable(),
       issuer_timezone: z.string().min(1).max(64),
+      art_design: z
+        .string()
+        .regex(/^[a-z0-9-]{1,40}$/)
+        .nullable()
+        .optional(),
     })
     .strict(),
+  archive_card: z.object({ id: uuid }).strict(),
+  restore_card: z.object({ id: uuid }).strict(),
   create_benefit: benefitTerms.extend({ card_id: uuid }).strict(),
   version_benefit: z
     .object({ benefit_id: uuid, effective_from: day, changes: benefitTerms })

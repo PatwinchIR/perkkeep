@@ -2,6 +2,8 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { X, ArrowUpRight, Leaf } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
+import { cardDesign } from "@/lib/card-art";
 import type { Period, Card } from "@/lib/types";
 import {
   STATUS_LABELS,
@@ -90,26 +92,81 @@ export function PageHeading({
     </div>
   );
 }
+export function CardArt({
+  card,
+  sizes = "320px",
+}: {
+  card: Pick<Card, "product_name" | "art_design" | "issuer">;
+  sizes?: string;
+}) {
+  const design = cardDesign(card);
+  if (!design) return null;
+  const alt = `${card.product_name} product image from ${card.issuer}`;
+  if (!design.crop)
+    return (
+      <Image
+        className="card-art-image"
+        src={design.src}
+        alt={alt}
+        width={design.width}
+        height={design.height}
+        sizes={sizes}
+      />
+    );
+  const { x, y, w, h } = design.crop;
+  return (
+    <div className="card-art-crop" style={{ aspectRatio: `${w} / ${h}` }}>
+      <Image
+        src={design.src}
+        alt={alt}
+        width={design.width}
+        height={design.height}
+        sizes={`${Math.round((design.width / w) * 320)}px`}
+        style={{
+          position: "absolute",
+          maxWidth: "none",
+          width: `${(design.width / w) * 100}%`,
+          height: "auto",
+          left: `${(-x / w) * 100}%`,
+          top: `${(-y / h) * 100}%`,
+        }}
+      />
+    </div>
+  );
+}
+
 export function CardTile({ card, periods }: { card: Card; periods: Period[] }) {
   const known = periods
     .map((p) => knownAvailable(p))
     .filter((n): n is number => n !== null);
+  const art = !!cardDesign(card);
   return (
     <Link href={`/cards/${card.id}`} className="card-tile">
-      <div
-        className={`card-face ${card.issuer === "American Express" ? "amex" : card.issuer === "Discover" ? "discover" : "chase"}`}
-      >
-        <div>
-          <span className="card-issuer">{card.issuer}</span>
-          <ArrowUpRight size={19} />
+      {art ? (
+        <div className="card-face art">
+          <CardArt card={card} />
         </div>
-        <strong>{card.display_name}</strong>
-        <div>
-          <span className="chip" />
-          <span className="card-digits">{cardEnding(card.last4)}</span>
+      ) : (
+        <div
+          className={`card-face ${card.issuer === "American Express" ? "amex" : card.issuer === "Discover" ? "discover" : "chase"}`}
+        >
+          <div>
+            <span className="card-issuer">{card.issuer}</span>
+            <ArrowUpRight size={19} />
+          </div>
+          <strong>{card.display_name}</strong>
+          <div>
+            <span className="chip" />
+            <span className="card-digits">{cardEnding(card.last4)}</span>
+          </div>
         </div>
-      </div>
+      )}
       <div className="card-tile-details">
+        {art && (
+          <span className="card-tile-name">
+            {card.display_name} · {cardEnding(card.last4)}
+          </span>
+        )}
         <strong>
           {card.identity_verified_at
             ? `${periods.length} current ${periods.length === 1 ? "benefit" : "benefits"}`
