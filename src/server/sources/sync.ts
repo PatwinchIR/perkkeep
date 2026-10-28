@@ -44,7 +44,9 @@ export function syncWindow(
 const ISSUERS: [RegExp, RegExp][] = [
   [/american express|amex/i, /american express/i],
   [/chase|jpmorgan/i, /chase/i],
-  [/discover/i, /discover/i],
+  [/discover|capital one/i, /discover/i],
+  [/citi/i, /citi/i],
+  [/apple|goldman/i, /apple/i],
 ];
 export async function proposeMappings(tx: Tx) {
   const { rows: accounts } = await tx.query(

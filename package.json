@@ -17,7 +17,8 @@
     "local:postgres": "node scripts/local-postgres.mjs",
     "db:migrate": "node scripts/db-migrate.mjs",
     "neon:provision": "node scripts/neon-provision.mjs",
-    "neon:inspect": "node scripts/neon-inspect.mjs"
+    "neon:inspect": "node scripts/neon-inspect.mjs",
+    "owner:cards": "node scripts/owner-cards.mjs"
   },
   "keywords": [],
   "author": "",

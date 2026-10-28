@@ -169,6 +169,26 @@
       "match": [],
       "placeholder": ["#6b6f68", "#4b4f49"],
       "text": "#f2f3ef"
+    },
+    "citi-costco-anywhere": {
+      "match": ["Citi Costco Anywhere Visa"],
+      "placeholder": ["#5f6b74", "#36414a"],
+      "text": "#f2f4f5"
+    },
+    "citi-strata": {
+      "match": ["Citi Strata"],
+      "placeholder": ["#1f2f4d", "#0d1a33"],
+      "text": "#eef2f8"
+    },
+    "citi-double-cash": {
+      "match": ["Citi Double Cash"],
+      "placeholder": ["#2a8c86", "#135f5b"],
+      "text": "#f1faf9"
+    },
+    "apple-card": {
+      "match": ["Apple Card"],
+      "placeholder": ["#f1f1f3", "#cfd0d6"],
+      "text": "#2a2a2e"
     }
   }
 }
