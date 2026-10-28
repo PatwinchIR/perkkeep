@@ -1,0 +1,39 @@
+import type { Database, Json } from "./database.types";
+export type Card = Database["public"]["Tables"]["cards"]["Row"];
+export type Benefit = Database["public"]["Tables"]["benefits"]["Row"];
+export type Evidence =
+  Database["public"]["Tables"]["redemption_evidence"]["Row"];
+export type SyncRun = Database["public"]["Tables"]["sync_runs"]["Row"];
+export type AuditEvent = Database["public"]["Tables"]["audit_events"]["Row"];
+export type Period = Database["public"]["Tables"]["benefit_periods"]["Row"] & {
+  benefit_name: string;
+  cadence: string;
+  enrollment_required: boolean;
+  enrollment_status: string;
+  eligibility_status: string;
+  enabled: boolean;
+  card_name: string;
+  last4: string | null;
+  issuer: string;
+  issuer_timezone: string;
+  card_status: string;
+  identity_verified_at: string | null;
+  confirmed_cents: number;
+  candidate_cents: number;
+  confirmed_units: number;
+  candidate_units: number;
+  remaining_cents: number | null;
+  remaining_units: number | null;
+  unresolved_count: number;
+  negative_balance: boolean;
+};
+export type Snapshot = {
+  cards: Card[];
+  benefits: Benefit[];
+  periods: Period[];
+  evidence: Evidence[];
+  runs: SyncRun[];
+  audit: AuditEvent[];
+  periodErrors: string[];
+};
+export type { Json };

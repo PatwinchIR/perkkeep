@@ -1,0 +1,37 @@
+project_id = "perkkeep"
+[experimental]
+stack = true
+[api]
+enabled = true
+schemas = ["public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+auto_expose_new_tables = false
+[db]
+major_version = 17
+health_timeout = "3m"
+[db.migrations]
+enabled = true
+[db.seed]
+enabled = false
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:3017"
+additional_redirect_urls = ["http://127.0.0.1:3017"]
+jwt_expiry = 3600
+enable_signup = true
+[auth.email]
+enable_signup = true
+enable_confirmations = false
+[local_smtp]
+enabled = true
+[studio]
+enabled = false
+[storage]
+enabled = false
+[realtime]
+enabled = false
+[analytics]
+enabled = false
+[edge_runtime]
+enabled = false

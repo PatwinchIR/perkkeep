@@ -1,0 +1,15 @@
+node_modules/
+.next/
+.env*
+!.env.example
+.local/
+.vercel/
+test-results/
+playwright-report/
+coverage/
+*.tsbuildinfo
+.DS_Store
+supabase/.temp/
+supabase/.branches/
+.agents/
+skills-lock.json
