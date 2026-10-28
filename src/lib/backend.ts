@@ -10,12 +10,15 @@ export type AuthState =
   | { status: "not_allowed"; email: string }
   | { status: "signed_in"; user: { id: string; email: string } };
 
+export type AuthStep = { verify?: string; message?: string };
+
 export interface Backend {
   current(): Promise<AuthState>;
   subscribe(onChange: () => void): () => void;
-  /** Returns a message to show, or null once signed in. */
-  signIn(email: string, password: string): Promise<string | null>;
-  signUp(email: string, password: string): Promise<string | null>;
+  /** Resolves once signed in, or asks for the emailed verification code. */
+  signIn(email: string, password: string): Promise<AuthStep>;
+  signUp(email: string, password: string): Promise<AuthStep>;
+  verifyEmail(email: string, code: string): Promise<void>;
   requestPasswordReset(email: string): Promise<string>;
   resendVerification(email: string): Promise<string>;
   resetPassword(token: string, password: string): Promise<string>;
@@ -78,16 +81,14 @@ export function createBackend(): Backend {
     },
     async signIn(email, password) {
       try {
-        await post("/api/auth/sign-in/email", {
-          email,
-          password,
-          callbackURL: origin(),
-        });
-        return null;
+        await post("/api/auth/sign-in/email", { email, password });
+        return {};
       } catch (e) {
-        if ((e as { code?: string }).code === "EMAIL_NOT_VERIFIED")
-          return "Verify your email address first. We sent a new link if one was due.";
-        throw e;
+        if ((e as { code?: string }).code !== "EMAIL_NOT_VERIFIED") throw e;
+        return {
+          verify: email,
+          message: "Enter the verification code we emailed you.",
+        };
       }
     },
     async signUp(email, password) {
@@ -95,9 +96,14 @@ export function createBackend(): Backend {
         email,
         password,
         name: email.split("@")[0],
-        callbackURL: origin(),
       });
-      return "Check your email and open the verification link, then sign in.";
+      return {
+        verify: email,
+        message: "We emailed you a verification code. Enter it to finish.",
+      };
+    },
+    async verifyEmail(email, code) {
+      await post("/api/auth/email-otp/verify-email", { email, otp: code });
     },
     async requestPasswordReset(email) {
       await post("/api/auth/request-password-reset", {
@@ -107,11 +113,11 @@ export function createBackend(): Backend {
       return "If that address has an account, a password reset link is on its way.";
     },
     async resendVerification(email) {
-      await post("/api/auth/send-verification-email", {
+      await post("/api/auth/email-otp/send-verification-otp", {
         email,
-        callbackURL: origin(),
+        type: "email-verification",
       });
-      return "A new verification link is on its way.";
+      return "A new verification code is on its way.";
     },
     async resetPassword(token, password) {
       await post("/api/auth/reset-password", { token, newPassword: password });

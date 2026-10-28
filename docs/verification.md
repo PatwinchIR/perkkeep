@@ -1,4 +1,6 @@
-# Perkkeep implementation and verification report
+# Perkkeep implementation and verification report (historical)
+
+> This report describes the original local Supabase stack, which has since been removed. Current results are in [verification-2026-10-28.md](verification-2026-10-28.md).
 
 Date: 2026-10-27 (America/New_York). Project: `perkkeep`.
 

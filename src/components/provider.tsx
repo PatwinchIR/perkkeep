@@ -266,6 +266,10 @@ function Login({
     [error, setError] = useState(""),
     [message, setMessage] = useState(""),
     [create, setCreate] = useState(false),
+    [verifying, setVerifying] = useState<string | null>(
+      auth.status === "unverified" ? auth.email : null,
+    ),
+    [code, setCode] = useState(""),
     [resetToken] = useState(() =>
       typeof window === "undefined"
         ? null
@@ -295,9 +299,24 @@ function Login({
       });
       return;
     }
-    void run(() =>
-      create ? ledger.signUp(email, password) : ledger.signIn(email, password),
-    );
+    void run(async () => {
+      const step = create
+        ? await ledger.signUp(email, password)
+        : await ledger.signIn(email, password);
+      if (step.verify) setVerifying(step.verify);
+      return step.message ?? null;
+    });
+  }
+  function verify(event: React.FormEvent) {
+    event.preventDefault();
+    const address = verifying!;
+    void run(async () => {
+      await ledger.verifyEmail(address, code.trim());
+      setVerifying(null);
+      setCode("");
+      // A verified account signs in automatically; otherwise sign in again.
+      return password ? (await ledger.signIn(address, password), null) : null;
+    });
   }
   function passwordReset() {
     if (!email) {
@@ -317,21 +336,6 @@ function Login({
             : "Welcome back."}
       </h1>
       <p>Sign in to your personal benefits ledger.</p>
-      {auth.status === "unverified" && (
-        <div className="notice" role="status">
-          {auth.email} is signed in but not verified yet. Open the link in your
-          email, then sign in again.
-          <button
-            className="text-button"
-            disabled={loading}
-            onClick={() =>
-              void run(() => ledger.resendVerification(auth.email))
-            }
-          >
-            Send a new verification link
-          </button>
-        </div>
-      )}
       {auth.status === "not_allowed" && (
         <div className="notice" role="status">
           {auth.email} does not have access to this private ledger.
@@ -344,55 +348,97 @@ function Login({
           </button>
         </div>
       )}
-      <form onSubmit={submit} className="form-stack">
-        {!resetToken && (
+      {verifying ? (
+        <form onSubmit={verify} className="form-stack">
+          <p className="notice" role="status">
+            Enter the code sent to {verifying}. Your ledger opens only after
+            your email address is verified.
+          </p>
           <label>
-            Email address
+            Verification code
             <input
-              type="email"
-              autoComplete="email"
+              inputMode="numeric"
+              autoComplete="one-time-code"
               required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
+              pattern="[0-9]{4,10}"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
             />
           </label>
-        )}
-        <label>
-          {resetToken ? "New password" : "Password"}
-          <input
-            type="password"
-            autoComplete={
-              create || resetToken ? "new-password" : "current-password"
-            }
-            required
-            minLength={12}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </label>
-        {error && (
-          <p className="form-error" role="alert">
-            {error}
-          </p>
-        )}
-        {message && (
-          <p className="notice" role="status">
-            {message}
-          </p>
-        )}
-        <button className="primary" disabled={loading}>
-          {loading
-            ? "One moment…"
-            : resetToken
-              ? "Save new password"
-              : create
-                ? "Create owner account"
-                : "Sign in"}
-          <ArrowUpRight size={17} />
-        </button>
-      </form>
-      {!resetToken && (
+          {error && (
+            <p className="form-error" role="alert">
+              {error}
+            </p>
+          )}
+          {message && (
+            <p className="notice" role="status">
+              {message}
+            </p>
+          )}
+          <button className="primary" disabled={loading}>
+            {loading ? "One moment…" : "Verify email"}
+            <ArrowUpRight size={17} />
+          </button>
+          <button
+            type="button"
+            className="text-button"
+            disabled={loading}
+            onClick={() => void run(() => ledger.resendVerification(verifying))}
+          >
+            Send a new code
+          </button>
+        </form>
+      ) : (
+        <form onSubmit={submit} className="form-stack">
+          {!resetToken && (
+            <label>
+              Email address
+              <input
+                type="email"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+              />
+            </label>
+          )}
+          <label>
+            {resetToken ? "New password" : "Password"}
+            <input
+              type="password"
+              autoComplete={
+                create || resetToken ? "new-password" : "current-password"
+              }
+              required
+              minLength={12}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </label>
+          {error && (
+            <p className="form-error" role="alert">
+              {error}
+            </p>
+          )}
+          {message && (
+            <p className="notice" role="status">
+              {message}
+            </p>
+          )}
+          <button className="primary" disabled={loading}>
+            {loading
+              ? "One moment…"
+              : resetToken
+                ? "Save new password"
+                : create
+                  ? "Create owner account"
+                  : "Sign in"}
+            <ArrowUpRight size={17} />
+          </button>
+        </form>
+      )}
+      {!resetToken && !verifying && (
         <button
           className="secondary full-width"
           disabled={loading}
@@ -401,7 +447,7 @@ function Login({
           <Mail size={16} /> Email me a password reset link
         </button>
       )}
-      {!resetToken && (
+      {!resetToken && !verifying && (
         <button
           className="text-button"
           onClick={() => {

@@ -10,12 +10,18 @@ const ALLOWED: Record<string, string[]> = {
   "sign-in/email": ["POST"],
   "sign-up/email": ["POST"],
   "sign-out": ["POST"],
-  "send-verification-email": ["POST"],
-  "verify-email": ["GET"],
+  "email-otp/send-verification-otp": ["POST"],
+  "email-otp/verify-email": ["POST"],
   "request-password-reset": ["POST"],
   "reset-password": ["POST"],
   "revoke-sessions": ["POST"],
 };
+// Requests that create accounts or send email are limited to owner addresses.
+const OWNER_ONLY = new Set([
+  "sign-up/email",
+  "email-otp/send-verification-otp",
+  "email-otp/verify-email",
+]);
 type Context = { params: Promise<{ path: string[] }> };
 
 async function handle(request: Request, context: Context) {
@@ -23,11 +29,16 @@ async function handle(request: Request, context: Context) {
   if (!ALLOWED[path]?.includes(request.method))
     return Response.json({ message: "Not found" }, { status: 404 });
   try {
-    if (path === "sign-up/email") {
+    if (OWNER_ONLY.has(path)) {
       const body = (await request
         .clone()
         .json()
-        .catch(() => null)) as { email?: unknown } | null;
+        .catch(() => null)) as { email?: unknown; type?: unknown } | null;
+      if (
+        path === "email-otp/send-verification-otp" &&
+        body?.type !== "email-verification"
+      )
+        return Response.json({ message: "Not found" }, { status: 404 });
       if (typeof body?.email !== "string" || !isAllowedEmail(body.email))
         return Response.json(
           {

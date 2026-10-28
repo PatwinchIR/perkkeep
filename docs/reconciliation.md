@@ -1,55 +1,82 @@
-# Reconciliation contract and external-integration gate
+# Reconciliation contract and external-integration status
 
-## October 28 access observation
+## Capability observations
 
-Plugin discovery reports Finances installed and enabled. The available tool inventory in this Codex chat contains no Finances account or transaction reader, including after discovery. Therefore no live Finances transactions were read, imported, or reconciled. Installed status alone is not evidence that a tool can run here.
+**October 28, earlier Codex session.** Plugin discovery reported Finances as installed and enabled, but no Finances account or transaction reader was exposed. Installed status alone is not evidence that a tool can run.
 
-Permission inspection for both Finances and Supabase reports **Use my default**, with the default **Allow low-risk actions**. Sensitive actions may be denied. These settings do not prove unattended write permission, and no permission setting was changed.
+**October 28, Claude Code cloud session.** No ChatGPT plugin or ChatGPT Finances tool is available to Claude. The session listed a third-party personal-finance connector, along with Gmail, Calendar and Vercel connectors. That finance connector is a different aggregator, not ChatGPT Finances, and the owner has not authorized it for Perkkeep, so it was not called. Gmail was used only to look for Neon verification emails sent to the owner's dedicated test aliases.
 
-The official [scheduled-task documentation](https://learn.chatgpt.com/docs/automations) says tasks can use tools available to their chat and recommends testing the prompt interactively first. The interactive Finances read and working hosted ledger are still unavailable here, so no scheduled end-to-end test has run and no background financial automation was enabled. The fallback remains the app's authenticated manual reconciliation form with explicit coverage, evidence, audit history, and read-back. A local database test is not a Finances integration test, and a Codex heartbeat would not prove availability in a ChatGPT cloud task.
+Consequently:
 
-## What is implemented
+- No real Finances transaction has been read, imported or reconciled.
+- No live Finances-to-ledger reconciliation has been verified.
+- No scheduled ChatGPT cycle has run. **Classification: not testable from the available environment.** Neither Claude nor a Vercel schedule can inherit the owner's ChatGPT Finances authorization, so no substitute scheduler was created.
 
-`record_evidence(p_record jsonb)` is an authenticated, RLS-scoped, transactional append. IDs or stable source hashes make identical retries idempotent; changed content using the same key is rejected. Hash source references with SHA-256 before storing them. Do not store full card numbers, tokens, passwords, Finances internal IDs, or raw transaction feeds.
+The supported fallback is authenticated manual reconciliation with explicit coverage, evidence and audit history, plus the reconciliation exchange described below.
 
-`apply_reconciliation(p_request_key uuid, p_trigger text, p_periods jsonb, p_evidence jsonb, p_summary jsonb)` inserts a sync run, applies evidence and coverage in one subtransaction, and preserves a failed run if validation fails. A failure rolls back its evidence and coverage changes. Exact repeat requests return the same run. Different inputs with the same request key fail. Start an explicit retry with a new key; unchanged evidence still deduplicates.
+## Hosted integration boundary
 
-- `p_trigger`: `manual`, `scheduled`, or `user_edit`. This is provenance, not proof a scheduler works.
-- `p_periods`: objects with `id`, `coverage_status` (`complete`, `partial`, `unavailable`) and `coverage_through` (date/null).
-- `p_evidence`: records described below.
-- `p_summary`: concise coverage limitations, source observation and reconciliation context; no large raw feeds.
+All writes go through `POST /api/ledger` with a valid Neon Auth session for a verified owner. There is no administrative SQL endpoint, and no browser or external tool receives database credentials. The server validates the request, then runs the same SQL functions under the owner's row-level security:
 
-Evidence fields include period ID, source type, hashed source reference, transaction date, optional merchant, integer cents **or** integer units, eligibility result, confidence, recorded-by classification, notes and optional `supersedes_evidence_id`.
+- `record_evidence(p_record jsonb)`: transactional append. An ID or stable hashed source reference makes identical retries idempotent. A reused key with changed content is rejected.
+- `apply_reconciliation(p_request_key uuid, p_trigger text, p_periods jsonb, p_evidence jsonb, p_summary jsonb)`: inserts a sync run and applies evidence and coverage in one subtransaction. A failure rolls back that run's evidence and coverage but keeps the failed run record. An exact repeat returns the same run, and changed inputs under the same key are rejected.
 
-Purchase-only evidence is a candidate. Inference cannot confirm a redemption. Explicit issuer credits/portal confirmations or the user's verification can establish confirmed usage. Link a posted credit to its matched candidate using supersession to avoid leaving both as live evidence. A split credit can replace the candidate with the first confirmed portion and append additional confirmed portions with distinct references; explicitly preserve any unfulfilled portion as a separate candidate if appropriate. Overlapping benefits require an explicit eligibility/allocation decision, not automatic double assignment.
+### Reconciliation exchange (Settings → Exchange with a transaction reviewer)
 
-A purchase refund does not automatically imply a benefit reversal. Record unverified refund consequences as unknown/review. A verified entitlement reversal uses a negative amount and a note. Totals clamp at zero but an excessive reversal is flagged for review. An import or inference cannot supersede a user-authored record. A correction must refer to the same owner and period and can have only one direct successor. All previous rows remain readable.
+1. **Copy context.** Perkkeep produces JSON with open period IDs, card and benefit names, dates, allowances, current totals and coverage. It contains no card digits, owner IDs or transactions.
+2. **Review elsewhere.** Paste the context into a chat that can actually read the owner's transactions, for example an interactive ChatGPT session with Finances, and ask it for a request in the format below.
+3. **Paste and apply.** The owner reviews the request, confirms the checkbox, and Perkkeep validates and applies it once, then shows the stored run and the updated balances. Pasting the same request again changes nothing.
 
-## Ownership when using the Supabase connector
+This keeps the reviewer outside the trust boundary. The chat never holds a session or credential, and every write is owner-confirmed and validated server-side.
 
-Browser calls use the signed-in owner's Auth JWT. Connected SQL tools may run as a database administrator, so they do **not** automatically have that end-user context. Audit triggers intentionally reject writes without `auth.uid()`.
+Request format (operation `apply_reconciliation`):
 
-During an approved integration test, explicitly resolve and verify the owner's Supabase Auth UUID, set an authenticated owner context **inside a transaction**, invoke the same RPC, read it back, and commit. Do not disable RLS or remove the audit guard to make connector writes pass. An authorized connector's admin ability to choose an owner is still privileged access and must be treated accordingly.
-
-A conceptual SQL outline (replace placeholders only with verified values in the approved project):
-
-```sql
-begin;
-set local role authenticated;
-select set_config('request.jwt.claims', '{"sub":"VERIFIED_OWNER_UUID","role":"authenticated"}', true);
--- select public.apply_reconciliation(...verified structured inputs...);
--- select * from public.sync_runs where request_key = 'VERIFIED_REQUEST_UUID';
-commit;
+```json
+{
+  "request_key": "new UUID per run; reuse only to retry the identical request",
+  "trigger": "manual",
+  "periods": [
+    {
+      "id": "period UUID",
+      "coverage_status": "complete | partial | unavailable",
+      "coverage_through": "YYYY-MM-DD or null"
+    }
+  ],
+  "evidence": [
+    {
+      "benefit_period_id": "period UUID",
+      "source_type": "purchase | statement_credit | email_confirmation | issuer_portal | manual | refund | reversal",
+      "source_reference_hash": "64-char lowercase SHA-256 of a stable source reference",
+      "transaction_date": "YYYY-MM-DD",
+      "merchant": "optional, ≤200 chars",
+      "amount_cents": 1234,
+      "confidence": "candidate | confirmed | unknown | rejected",
+      "eligibility_result": "eligible | unknown | ineligible",
+      "recorded_by": "import | inference",
+      "notes": "short reason",
+      "supersedes_evidence_id": "optional UUID of the candidate a credit replaces"
+    }
+  ],
+  "summary": {
+    "source": "chatgpt_finances_interactive",
+    "coverage_limitations": "what could not be seen"
+  }
+}
 ```
 
-The local test suite exercises the actual Auth JWT → REST → Postgres route. The ChatGPT connector route above has **not** been tested, and this outline is not a claim of connector or Finances availability.
+Rules the server enforces:
 
-## Still required for Milestone 0
+- Purchases are always candidates; an inference can never confirm.
+- `confirmed` requires `eligible`. A confirmed manual entry, refund or reversal needs an explanatory note.
+- Imports cannot supersede user-entered evidence, and a correction must stay in the same period and owner.
+- Use cents **or** units, matching the benefit.
+- Coverage cannot be in the future, and `complete` needs an observation date.
+- Requests are limited to 200 periods and 500 evidence records, with bounded field sizes.
 
-1. Complete the Neon/Vercel hosted integration and verify authenticated owner isolation. The local Supabase contract below remains the reference behavior; the hosted adapter is still pending.
-2. In an interactive ChatGPT conversation where Finances is actually available, verify a card's identity and inspect its transactions with adequate backfill. Record exactly what coverage the tool can establish. Use labeled synthetic evidence if no actual qualifying event exists.
-3. Perform an approved connector write/read-back through the ownership boundary above. Document any approvals or pauses.
-4. Only then create one ChatGPT scheduled test that reads Finances, reconciles one benefit, writes Supabase and reads back. Repeat twice with idempotent inputs and record read/write availability, approval pauses and failures.
-5. Choose **unattended**, **approval-dependent**, or **manual-only** from those observed results. Until that proof exists, Perkkeep remains manual-only.
+Hash source references with SHA-256 before submitting them. Never include full card numbers, account or Finances internal IDs, tokens, or raw transaction feeds. A purchase refund does not imply a benefit reversal; record it as `unknown` until the issuer reverses the credit.
 
-No automation has been scheduled. No fallback Plaid connection, custom MCP server, Finances impersonation or additional aggregator has been created. Supabase/Vercel scheduled execution cannot magically access the user's ChatGPT Finances authorization.
+## Remaining steps toward transaction-assisted reconciliation
+
+1. In an interactive ChatGPT conversation where Finances transaction tools actually appear, map each connected account to a verified card. Leave ambiguous mappings, including the unidentified Chase record, unresolved.
+2. Record the transaction date range and completeness the tool can establish, run the exchange above, and confirm the read-back in Perkkeep. Record any approval prompts.
+3. Only after that works, test whether a ChatGPT scheduled task can do the same without the owner present. Writing still needs an authenticated path; the exchange intentionally requires the owner's confirmation, so a fully unattended write would need a separately designed, revocable credential. Observe two cycles before classifying the result as unattended, approval-dependent or manual-only.

@@ -1,31 +1,48 @@
-# Perkkeep architecture and milestone decisions
+# Perkkeep architecture
 
-Reviewed 2026-10-27. Source: the user's credit-card benefits implementation specification. The user's direct instructions override procedural suggestions embedded in that document.
+Updated 2026-10-28. The hosted Neon backend replaces the earlier local Supabase stack, which was removed at the owner's request. Ledger rules are unchanged: the same SQL migrations now run on Neon.
 
 ## Boundaries
 
-Next.js App Router / TypeScript / Tailwind PWA → Supabase JS → Supabase Auth + Postgres RLS. Ordinary data operations go directly to Supabase. No Plaid, banking connector, custom MCP server, Finances API impersonation, background financial fetch, or service-role key in the app.
+```
+Browser PWA ──fetch (same origin, cookies)──▶ Next.js on Vercel
+                                               ├─ /api/auth/*  → filtered proxy → Neon Auth
+                                               ├─ /api/session → session state only
+                                               └─ /api/ledger  → session check → owner transaction → Neon PostgreSQL
+```
 
-The existing projects `comment-section`, `comment-section-dev`, and `hanabi` are excluded. Only their names were read during discovery. No hosted resource is created or changed. A dedicated **local** Supabase native stack is used for the database spike and integration tests. The user's local-verification instruction takes precedence over the generic Vercel bootstrap skill's cloud-link-first workflow.
+- The browser has no database URL, Auth secret or owner identifier. `check:client` fails the build check if a database URL or a configured secret appears in browser output.
+- No Plaid, banking connector, MCP server, Finances API impersonation, background financial fetch or scheduled job exists.
 
-## Sequence and blockers
+## Authentication and private owner access
 
-0. Test migrations, authenticated writes, read-back, deduplication, and ownership against the actual local Supabase API before frontend work. This proves the local application data path only. Hosted project approval, chosen organization, quoted cost, ChatGPT Finances availability and two scheduled runs remain separate, unproven requirements. No scheduled task is created on the basis of this local test.
-1. Build database, owner-scoped catalog, append-only evidence and audit history; test period resets and correction handling. Card identities start unverified; no benefit is enabled without current sourced terms and user eligibility/enrollment confirmation.
-2. Build mobile PWA, test against the local Auth/API/Postgres stack, run production build and browser checks. Hosted deployment and physical iPhone Home Screen installation require the hosted project and device verification.
-3. Optional automation remains disabled until the external end-to-end test passes twice. Manual reconciliation is the initial operational mode.
+- Neon Auth (managed Better Auth) stores users in the `neon_auth` schema. The SDK's Next.js handler proxies auth calls and sets `__Secure-neon-auth.*` HttpOnly, `SameSite=Lax` cookies.
+- The proxy forwards only sign-in, sign-up, sign-out, session, email-verification code, password reset and session revocation endpoints. Admin, organization, social, magic-link and token endpoints return 404.
+- Sign-up and verification-code requests are refused unless the email is in `PERKKEEP_OWNER_EMAILS`. `PERKKEEP_OWNER_PLUS_ALIASES=allow` also accepts `name+tag@domain` for a listed `name@domain`. Each alias is a separate owner, which is how isolated test owners are created.
+- On every ledger request the server asks Neon Auth to validate the session token (`disableCookieCache`), so sign-out and revocation take effect immediately. The account must have a verified email and an allowed address.
+- Neon Auth project configuration (trusted origins, required email verification) lives in `neon_auth.project_config`. See [deployment](deployment.md) for the values in use and how they were set.
 
-## Data integrity
+## Database access and row-level security
 
-- Ownership on every table and composite foreign keys prevent cross-owner parent references.
-- Periods use issuer-local date boundaries `[start, end)`. Existing periods and their rule snapshots never reset or disappear; a new period is inserted for each reset.
-- Benefits are versioned by effective dates. Existing period snapshots remain immutable when terms change. Mid-period changes require explicit segmentation and allowance confirmation, never automatic prorating.
-- Evidence is append-only. Corrections supersede an existing record in the same period; a unique supersession prevents branches and a later record cannot modify history. Inferred imports cannot supersede user-confirmed records.
-- Confirmed and candidate amounts are separate. A statement credit may supersede its purchase evidence; unmatched purchases remain candidates. Refunds/reversals affect confirmed usage only when explicitly confirmed as an entitlement reversal.
-- Idempotency is per owner, card, period, source type and stable hashed reference. Repeated keys with changed payloads must be rejected, not silently overwritten.
-- Coverage is recorded independently of evidence. Unknown, partial and stale coverage never establishes an unused balance. Unknown eligibility, enrollment or anniversary suppresses available-credit totals.
-- Database views use `security_invoker`; privileged trigger helpers have a fixed search path, live in a private schema and are not exposed as callable RPCs.
+- The server connects with the Neon-provided owner role, which has `BYPASSRLS`. It never serves queries under that privilege. `withOwner()` opens a transaction, maps the Neon Auth user to an internal UUID in `auth.users`, runs `SET LOCAL ROLE authenticated`, sets the transaction-local `perkkeep.user_id`, and asserts that `current_user` is `authenticated`, that the role has no `BYPASSRLS`, and that `auth.uid()` matches before any ledger query.
+- `auth.uid()` reads only that transaction-local setting. Without it, every policy denies access. `authenticated` cannot read `auth.users`; `anon` has no privileges, and the server role cannot assume it.
+- The request body never carries an owner ID. Only allow-listed operations (`src/lib/ledger-ops.ts`) are accepted, each with a strict schema; unknown fields are rejected. SQL is parameterized. Cross-origin writes are rejected.
+- The migration `db/neon/9000_neon_hardening.sql` fails if a restricted role can log in or bypass RLS, if `authenticated` can read identity mappings, or if any public table lacks RLS.
+
+## Data integrity (unchanged ledger rules)
+
+- Ownership on every table, plus composite foreign keys, prevents cross-owner parent references.
+- Periods use issuer-local `[start, end)` boundaries. Earlier periods and their rule snapshots are never reset or deleted; each reset inserts a new period.
+- Benefits are versioned by effective dates. Mid-period changes require explicit segmentation and never prorate automatically.
+- Evidence is append-only. A correction supersedes exactly one earlier record in the same period, and imports cannot supersede user-confirmed records.
+- Confirmed and candidate amounts are separate. A credit that supersedes its candidate is counted once. Refunds affect confirmed usage only through an explicitly explained entitlement reversal.
+- Idempotency applies per owner, card, period, source type and hashed reference. A repeated key with a changed payload is rejected. Reconciliation runs are keyed by request UUID plus an input digest.
+- Coverage is recorded separately from evidence. Unknown, partial or stale coverage never produces a confident unused balance.
+
+## Migrations
+
+`scripts/neon-migrate.mjs` applies `db/neon/0000_*`, then `db/migrations/*`, then `db/neon/9000_*`. Each file and its tracking row commit in one transaction under an advisory lock. Applied files are checksummed, and a changed file is refused. Production Vercel builds run the migrations before `next build`.
 
 ## Files
 
-`supabase/migrations` holds schema and functions; `src/lib` holds typed client and date/status rules; `src/app` and `src/components` hold the app; `tests` holds unit, real database/API and browser tests; `scripts` contains localhost-only setup/testing; `docs` records validation, rollout and manual reconciliation contracts.
+`db/` holds schema and platform SQL, `src/lib/server/` holds the server boundary, `src/lib/` holds shared rules and the browser client, `src/app/api/` holds route handlers, `tests/` holds domain, PostgreSQL and hosted browser tests, and `docs/` holds operations and verification records.
