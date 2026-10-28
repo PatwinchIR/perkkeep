@@ -11,6 +11,15 @@ Date: 2026-10-28. Branch: `claude/gallant-cray-jewnhr`, based on published commi
 - **Neon:** the container cannot reach Neon's Postgres port. A direct TCP connection to the unpooled endpoint on port 5432 timed out. Through the egress proxy, `CONNECT` to port 5432 returned `200 Connection Established`, but the proxy never relayed Postgres's plaintext `SSLRequest` (no reply within 15 seconds). A TLS handshake sent through the same tunnel was reset after 2 seconds. My reasoning here is that the proxy re-terminates TLS on every tunnel, so it cannot carry the Postgres wire protocol; I have not confirmed that cause with the proxy's operators. The proxy was not bypassed.
 - **Not done, because they depend on Neon:** `neon:provision`, the production deployment, and the end-to-end check with a synthetic account. The Neon Auth email-verification setting was not changed, because this container has no Neon Console or Neon API access.
 
+### Hosted release (2026-10-28, third session)
+
+- **Provisioning (owner's Mac):** `npm run neon:provision -- --database perkkeep --vercel --owner-email <owner>` created the `perkkeep` database, applied 0001 to 0003, verified `perkkeep_app` (no BYPASSRLS, no superuser, 0 rows without an identity), and saved `PERKKEEP_DATABASE_URL`, `NEON_AUTH_COOKIE_SECRET`, `PERKKEEP_ENCRYPTION_KEY` and `CRON_SECRET` to Vercel production. `PERKKEEP_OWNER_EMAILS` already existed. `neondb`, which holds the parallel deployment's schema and the Neon Auth tables, was not touched.
+- **Deployment (cloud container):** `vercel deploy --prod` from this branch built on Vercel (the production build guard passed) and was aliased to https://perkkeep.vercel.app. `.vercelignore` kept `.env*` and `.local/` out of the upload.
+- **Checked over HTTPS as an anonymous client:** `/api/session` reports provider `neon`. `/api/ledger`, `/api/sources` and `/api/card-art/[id]` return 401 without a session. A cross-origin write returns 403. `/api/test-auth` returns 404. `/api/cron/sync` without the secret returns 401. API responses send `no-store`. `/sw.js` is not cacheable. HSTS, `X-Frame-Options: DENY`, `nosniff`, `no-referrer` and the permissions policy are present. The sign-in page renders at 390px.
+- **Checked with a synthetic account** (`perkkeep-synthetic-<timestamp>@example.com`, named "Synthetic test account (delete me)"): sign-up through `/api/auth` succeeded, and sign-in was refused with `EMAIL_NOT_VERIFIED`, so Neon Auth enforces verification. This exposed a UI gap (no code entry without a session), fixed in 70608f4 and redeployed. The synthetic account remains unverified in Neon Auth; delete it in the Neon Console (Auth, Users).
+- **Not yet observed:** the owner's own sign-in, verification email delivery, the owner's ledger loading, and sign-out on the hosted app. These need the owner's mailbox and password.
+- **Rollback:** the previous production deployment (from `claude/magical-hypatia-cpmayb`, using `neondb`) can be promoted again in Vercel.
+
 ## 1. Deployed URL and commit
 
 - Deployed URL: none. Nothing was deployed from this session.
