@@ -17,6 +17,7 @@
     "local:postgres": "node scripts/local-postgres.mjs",
     "db:migrate": "node scripts/db-migrate.mjs",
     "neon:provision": "node scripts/neon-provision.mjs",
+    "neon:inspect": "node scripts/neon-inspect.mjs",
     "legacy:supabase:start": "supabase stack start --runtime native --eager",
     "legacy:supabase:stop": "supabase stack stop"
   },

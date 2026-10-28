@@ -19,6 +19,16 @@ export async function migrate(connectionString, log = console.log) {
       "create schema if not exists perkkeep_meta; create table if not exists perkkeep_meta.schema_migrations(name text primary key, sha256 text not null, applied_at timestamptz not null default now())",
     );
     await client.query("revoke all on schema perkkeep_meta from public");
+    // An existing history table from another tool or an earlier attempt is never altered.
+    const columns = (
+      await client.query(
+        "select column_name from information_schema.columns where table_schema='perkkeep_meta' and table_name='schema_migrations'",
+      )
+    ).rows.map((r) => r.column_name);
+    if (!["name", "sha256", "applied_at"].every((c) => columns.includes(c)))
+      throw new Error(
+        `perkkeep_meta.schema_migrations already exists with different columns (${columns.join(", ")}). Nothing was changed. Run npm run neon:inspect and share its output.`,
+      );
     const applied = new Map(
       (
         await client.query(
