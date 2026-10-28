@@ -1,6 +1,6 @@
 # Phase 2 report (in progress): review queue, alerts and progress
 
-Date: 2026-10-28. Branch: `claude/serene-lovelace-hhlh6k`, based on `main` at `7c282d9`.
+Date: 2026-10-28. Branch: `claude/serene-lovelace-hhlh6k` (draft pull request PatwinchIR/perkkeep#4), based on `main` at `7c282d9`.
 
 **Status:** the PWA half of Phase 2 is built and verified with synthetic data: a review queue and in-app alerts derived from the ledger, progress bars per benefit window, inline entry of partial use, and one-click confirmation of enrollment and eligibility. The matcher and rule files from the earlier Phase 2 session are unchanged. The Phase 2 gate (the owner reports that the PWA answers the six questions in brief section 1 for every card without a portal check) is **not yet claimed**: it needs the owner's own use, verified credit patterns on real statements, and the MCP endpoint, which is not built.
 
