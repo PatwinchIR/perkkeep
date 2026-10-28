@@ -1,47 +1,65 @@
 import type { NextConfig } from "next";
-// Deployment guard: refuse to build a Vercel deployment that could serve user queries with the
-// database owner, run the local test sign-in, or leak a connection string to the browser.
+// Deployment guard. Any Vercel build fails on an unsafe setting: an owner-role or local database
+// URL, the local test sign-in, a weak secret, or a connection string in a NEXT_PUBLIC_ variable.
+// Production builds also fail when a required setting is missing; previews without settings build
+// and show the setup screen, because they cannot open any data.
 if (process.env.VERCEL) {
-  const problems: string[] = [];
-  const appUrl = process.env.PERKKEEP_DATABASE_URL;
+  const unsafe: string[] = [];
+  const missing: string[] = [];
+  const env = process.env;
   const ownerUrls = [
-    process.env.DATABASE_URL,
-    process.env.DATABASE_URL_UNPOOLED,
-    process.env.POSTGRES_URL,
-    process.env.POSTGRES_URL_NON_POOLING,
+    env.DATABASE_URL,
+    env.DATABASE_URL_UNPOOLED,
+    env.POSTGRES_URL,
+    env.POSTGRES_URL_NON_POOLING,
   ].filter(Boolean);
-  if (!appUrl) problems.push("PERKKEEP_DATABASE_URL is missing");
+  if (!env.PERKKEEP_DATABASE_URL) missing.push("PERKKEEP_DATABASE_URL");
   else {
-    const u = new URL(appUrl);
+    const u = new URL(env.PERKKEEP_DATABASE_URL);
     if (["localhost", "127.0.0.1"].includes(u.hostname))
-      problems.push("PERKKEEP_DATABASE_URL points to a local database");
-    if (!u.username.startsWith("perkkeep_app") || ownerUrls.includes(appUrl))
-      problems.push(
+      unsafe.push("PERKKEEP_DATABASE_URL points to a local database");
+    if (
+      !u.username.startsWith("perkkeep_app") ||
+      ownerUrls.includes(env.PERKKEEP_DATABASE_URL)
+    )
+      unsafe.push(
         "PERKKEEP_DATABASE_URL must use the restricted perkkeep_app role",
       );
   }
-  const authUrl = process.env.NEON_AUTH_BASE_URL;
-  if (!authUrl || new URL(authUrl).protocol !== "https:")
-    problems.push("NEON_AUTH_BASE_URL must be an HTTPS URL");
-  if ((process.env.NEON_AUTH_COOKIE_SECRET ?? "").length < 32)
-    problems.push("NEON_AUTH_COOKIE_SECRET must have at least 32 characters");
-  if (!process.env.PERKKEEP_OWNER_EMAILS?.trim())
-    problems.push("PERKKEEP_OWNER_EMAILS is empty, so nobody could sign in");
-  if (Buffer.from(process.env.PERKKEEP_ENCRYPTION_KEY ?? "", "base64").length !== 32)
-    problems.push("PERKKEEP_ENCRYPTION_KEY must be 32 base64-encoded bytes");
-  if ((process.env.CRON_SECRET ?? "").length < 32)
-    problems.push("CRON_SECRET must have at least 32 characters");
-  if ((process.env.PERKKEEP_AUTH_PROVIDER ?? "neon") !== "neon")
-    problems.push("PERKKEEP_AUTH_PROVIDER must be neon on Vercel");
-  for (const [name, value] of Object.entries(process.env))
+  if (!env.NEON_AUTH_BASE_URL) missing.push("NEON_AUTH_BASE_URL");
+  else if (new URL(env.NEON_AUTH_BASE_URL).protocol !== "https:")
+    unsafe.push("NEON_AUTH_BASE_URL must be an HTTPS URL");
+  if (!env.NEON_AUTH_COOKIE_SECRET) missing.push("NEON_AUTH_COOKIE_SECRET");
+  else if (env.NEON_AUTH_COOKIE_SECRET.length < 32)
+    unsafe.push("NEON_AUTH_COOKIE_SECRET must have at least 32 characters");
+  if (!env.PERKKEEP_OWNER_EMAILS?.trim()) missing.push("PERKKEEP_OWNER_EMAILS");
+  if (!env.PERKKEEP_ENCRYPTION_KEY) missing.push("PERKKEEP_ENCRYPTION_KEY");
+  else if (Buffer.from(env.PERKKEEP_ENCRYPTION_KEY, "base64").length !== 32)
+    unsafe.push("PERKKEEP_ENCRYPTION_KEY must be 32 base64-encoded bytes");
+  if (!env.CRON_SECRET) missing.push("CRON_SECRET");
+  else if (env.CRON_SECRET.length < 32)
+    unsafe.push("CRON_SECRET must have at least 32 characters");
+  if ((env.PERKKEEP_AUTH_PROVIDER ?? "neon") !== "neon")
+    unsafe.push("PERKKEEP_AUTH_PROVIDER must be neon on Vercel");
+  for (const [name, value] of Object.entries(env))
     if (
       name.startsWith("NEXT_PUBLIC_") &&
       /postgres(ql)?:\/\//i.test(value ?? "")
     )
-      problems.push(`${name} exposes a database connection string`);
+      unsafe.push(`${name} exposes a database connection string`);
+  const problems = [
+    ...unsafe,
+    ...(env.VERCEL_ENV === "production" && missing.length
+      ? [`missing ${missing.join(", ")}`]
+      : []),
+  ];
   if (problems.length)
     throw new Error(
       `PerkKeep deployment configuration is unsafe: ${problems.join("; ")}.`,
+    );
+  if (missing.length)
+    console.warn(
+      `PerkKeep preview without ${missing.join(", ")}: it will show the setup screen.`,
     );
 }
 const config: NextConfig = {
