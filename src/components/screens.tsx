@@ -5,6 +5,7 @@ import {
   ArrowRight,
   ArrowUpRight,
   CheckCheck,
+  ClipboardCheck,
   Clock3,
   Plus,
   Search,
@@ -12,7 +13,9 @@ import {
   Smartphone,
   LogOut,
   SlidersHorizontal,
+  UserRound,
   WalletCards,
+  WifiOff,
 } from "lucide-react";
 import { useApp } from "./provider";
 import { run } from "@/lib/api";
@@ -649,11 +652,17 @@ export function ReviewScreen() {
   );
 }
 
+const HISTORY_VIEWS = [
+  ["periods", "Periods"],
+  ["evidence", "Evidence ledger"],
+  ["audit", "Change log"],
+] as const;
+
 export function HistoryScreen() {
   const { data } = useApp(),
     [card, setCard] = useState("all"),
     [month, setMonth] = useState("all"),
-    [view, setView] = useState("periods");
+    [view, setView] = useState<(typeof HISTORY_VIEWS)[number][0]>("periods");
   const periods = data.periods.filter(
     (p) =>
       (card === "all" || p.card_id === card) &&
@@ -666,6 +675,18 @@ export function HistoryScreen() {
         title="The whole story."
         description="Past periods, original evidence, and every correction—kept together."
       />
+      <div className="segmented" role="group" aria-label="History view">
+        {HISTORY_VIEWS.map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            aria-pressed={view === key}
+            onClick={() => setView(key)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       <div className="filter-row">
         <select
           aria-label="History card"
@@ -691,15 +712,6 @@ export function HistoryScreen() {
             <option key={m}>{m}</option>
           ))}
         </select>
-        <select
-          aria-label="History view"
-          value={view}
-          onChange={(e) => setView(e.target.value)}
-        >
-          <option value="periods">Periods</option>
-          <option value="evidence">Evidence ledger</option>
-          <option value="audit">Change log</option>
-        </select>
       </div>
       {view === "periods" ? (
         periods.length ? (
@@ -718,7 +730,7 @@ export function HistoryScreen() {
               <article key={e.id}>
                 <div className="ledger-dot" />
                 <div>
-                  <span className="overline">
+                  <span className="eyebrow">
                     {new Date(e.recorded_at).toLocaleString()} ·{" "}
                     {e.recorded_by === "user"
                       ? "User-reviewed"
@@ -783,7 +795,7 @@ export function HistoryScreen() {
                 <article key={a.id}>
                   <div className="ledger-dot" />
                   <div>
-                    <span className="overline">
+                    <span className="eyebrow">
                       {new Date(a.occurred_at).toLocaleString()}
                     </span>
                     <h3>
@@ -811,7 +823,7 @@ export function HistoryScreen() {
 }
 
 export function SettingsScreen() {
-  const { data, signOut } = useApp(),
+  const { data, session, signOut } = useApp(),
     [coverage, setCoverage] = useState(false),
     [error, setError] = useState("");
   async function signout() {
@@ -824,103 +836,150 @@ export function SettingsScreen() {
   return (
     <>
       <PageHeading
-        eyebrow="YOUR WORKSPACE"
+        eyebrow="SETTINGS"
         title="Keep it personal."
-        description="A clear view of how your ledger works and what’s connected."
+        description="Your account, connected accounts, reconciliation, and this app on your devices."
       />
-      <div className="settings-grid">
-        <section className="settings-card">
-          <span className="metric-icon">
-            <ShieldCheck size={22} />
-          </span>
-          <h2>Your data, your call.</h2>
-          <p>
-            Perkkeep reads your private ledger on the server, under your
-            verified sign-in. Connected accounts sync once a day; transactions
-            are evidence for review and never change a balance on their own.
-          </p>
-          <span className="badge needs_review">Manual reconciliation</span>
-          <button
-            className="primary"
-            disabled={!data.periods.length}
-            onClick={() => setCoverage(true)}
-          >
-            Record a manual reconciliation
-          </button>
-          <p className="hint">
-            Refresh reloads saved records. It does not check your bank.
-          </p>
-        </section>
-        <section id="install" className="settings-card">
-          <span className="metric-icon">
-            <Smartphone size={22} />
-          </span>
-          <h2>A place on your Home Screen.</h2>
-          <ol>
-            <li>Open the deployed HTTPS address in Safari on your iPhone.</li>
-            <li>Tap Share, then Add to Home Screen.</li>
-            <li>Name it Perkkeep and tap Add.</li>
-          </ol>
-          <p className="hint">
-            Localhost is for testing on this computer. Offline mode shows a
-            reconnect page; financial records are not stored in the
-            service-worker cache.
-          </p>
-        </section>
-      </div>
-      <NameOnCards />
-      <SourcesPanel />
-      <div className="section-heading">
-        <h2>Reconciliation log</h2>
-      </div>
-      {data.runs.length ? (
-        <div className="sync-log">
-          {data.runs.map((r) => (
-            <div key={r.id}>
-              <div>
-                <strong>{r.trigger.replaceAll("_", " ")} check</strong>
-                <span>
-                  {new Date(r.started_at).toLocaleString()} ·{" "}
-                  {r.periods_checked} periods checked
-                </span>
-                {r.error_summary && (
-                  <p className="form-error">{r.error_summary}</p>
-                )}
-                {typeof r.coverage_summary_json === "object" &&
-                  r.coverage_summary_json &&
-                  !Array.isArray(r.coverage_summary_json) && (
-                    <p>
-                      {String(
-                        r.coverage_summary_json.description ??
-                          "Coverage details retained with the run.",
-                      )}
-                    </p>
-                  )}
-              </div>
-              <span
-                className={`badge ${r.status === "success" ? "confirmed" : "needs_review"}`}
-              >
-                {r.status}
-              </span>
+      <section className="settings-section" aria-labelledby="settings-account">
+        <h2 id="settings-account">Account</h2>
+        <p>Who is signed in, and the name printed on your card faces.</p>
+        <div className="settings-group">
+          <div className="settings-row">
+            <span className="avatar" aria-hidden="true">
+              {session.email.slice(0, 1).toUpperCase()}
+            </span>
+            <div className="settings-row-text">
+              <h3>{session.email}</h3>
+              <p>Personal workspace · records are visible only to you.</p>
             </div>
-          ))}
+            <button className="secondary" onClick={() => void signout()}>
+              <LogOut size={16} /> Sign out
+            </button>
+          </div>
+          <NameOnCards />
         </div>
-      ) : (
-        <Empty title="No checks on record yet.">
-          Your first reconciliation will record its coverage, outcome, and time
-          here—including partial or failed checks.
-        </Empty>
-      )}
-      <div className="settings-signout">
-        <button className="secondary" onClick={() => void signout()}>
-          <LogOut size={16} /> Sign out
-        </button>
         {error && (
           <p role="alert" className="form-error">
             {error}
           </p>
         )}
-      </div>
+      </section>
+      <SourcesPanel />
+      <section className="settings-section" aria-labelledby="settings-recon">
+        <h2 id="settings-recon">Reconciliation</h2>
+        <p>How coverage is checked, and every check on record.</p>
+        <div className="settings-group">
+          <div className="settings-row">
+            <span className="metric-icon">
+              <ShieldCheck size={18} />
+            </span>
+            <div className="settings-row-text">
+              <h3>How your data is used</h3>
+              <p>
+                Perkkeep reads your private ledger on the server, under your
+                verified sign-in. Connected accounts sync once a day;
+                transactions are evidence for review and never change a balance
+                on their own.
+              </p>
+            </div>
+          </div>
+          <div className="settings-row">
+            <span className="metric-icon">
+              <ClipboardCheck size={18} />
+            </span>
+            <div className="settings-row-text">
+              <h3>Manual reconciliation</h3>
+              <p>
+                Record which periods you checked and through what date. Refresh
+                reloads saved records; it does not check your bank.
+              </p>
+            </div>
+            <button
+              className="primary"
+              disabled={!data.periods.length}
+              onClick={() => setCoverage(true)}
+            >
+              Record a manual reconciliation
+            </button>
+          </div>
+        </div>
+        <div className="settings-subheading">
+          <h3>Reconciliation log</h3>
+          <span className="count">{data.runs.length}</span>
+        </div>
+        {data.runs.length ? (
+          <div className="settings-group sync-log">
+            {data.runs.map((r) => (
+              <div key={r.id}>
+                <div>
+                  <strong>{r.trigger.replaceAll("_", " ")} check</strong>
+                  <span>
+                    {new Date(r.started_at).toLocaleString()} ·{" "}
+                    {r.periods_checked} periods checked
+                  </span>
+                  {r.error_summary && (
+                    <p className="form-error">{r.error_summary}</p>
+                  )}
+                  {typeof r.coverage_summary_json === "object" &&
+                    r.coverage_summary_json &&
+                    !Array.isArray(r.coverage_summary_json) && (
+                      <p>
+                        {String(
+                          r.coverage_summary_json.description ??
+                            "Coverage details retained with the run.",
+                        )}
+                      </p>
+                    )}
+                </div>
+                <span
+                  className={`badge ${r.status === "success" ? "success" : "failed"}`}
+                >
+                  {r.status}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <Empty title="No checks on record yet.">
+            Your first reconciliation will record its coverage, outcome, and
+            time here—including partial or failed checks.
+          </Empty>
+        )}
+      </section>
+      <section className="settings-section" aria-labelledby="settings-app">
+        <h2 id="settings-app">App</h2>
+        <p>Using Perkkeep on your phone and away from a connection.</p>
+        <div className="settings-group">
+          <div className="settings-row" id="install">
+            <span className="metric-icon">
+              <Smartphone size={18} />
+            </span>
+            <div className="settings-row-text">
+              <h3>Add to Home Screen</h3>
+              <ol>
+                <li>
+                  Open the deployed HTTPS address in Safari on your iPhone.
+                </li>
+                <li>Tap Share, then Add to Home Screen.</li>
+                <li>Name it Perkkeep and tap Add.</li>
+              </ol>
+              <p className="hint">Localhost is for testing on this computer.</p>
+            </div>
+          </div>
+          <div className="settings-row">
+            <span className="metric-icon">
+              <WifiOff size={18} />
+            </span>
+            <div className="settings-row-text">
+              <h3>Offline behavior</h3>
+              <p>
+                Offline mode shows a reconnect page. Financial records are not
+                stored in the service-worker cache.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
       {coverage && (
         <CoverageForm
           periods={data.periods}
@@ -954,26 +1013,34 @@ function NameOnCards() {
     }
   }
   return (
-    <form className="settings-card form-stack name-on-cards" onSubmit={save}>
-      <h2>Name on your cards</h2>
-      <label>
-        Name
-        <input
-          name="name"
-          required
-          maxLength={60}
-          defaultValue={session.name ?? ""}
-          autoComplete="name"
-        />
-      </label>
-      {error && (
-        <p role="alert" className="form-error">
-          {error}
-        </p>
-      )}
-      <button className="secondary" disabled={busy || offline}>
-        Save name
-      </button>
-    </form>
+    <div className="settings-row">
+      <span className="metric-icon">
+        <UserRound size={18} />
+      </span>
+      <div className="settings-row-text">
+        <h3>Name on your cards</h3>
+        <p>Printed on card faces that show your name and last four digits.</p>
+        <form className="form-row" onSubmit={save}>
+          <label>
+            Name
+            <input
+              name="name"
+              required
+              maxLength={60}
+              defaultValue={session.name ?? ""}
+              autoComplete="name"
+            />
+          </label>
+          <button className="secondary" disabled={busy || offline}>
+            Save name
+          </button>
+        </form>
+        {error && (
+          <p role="alert" className="form-error">
+            {error}
+          </p>
+        )}
+      </div>
+    </div>
   );
 }
