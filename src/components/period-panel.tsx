@@ -1,7 +1,8 @@
 "use client";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ExternalLink, Check, Plus, FileText, ChevronDown } from "lucide-react";
-import type { Period, Evidence } from "@/lib/types";
+import type { Benefit, Period, Evidence } from "@/lib/types";
+import type { Alert } from "@/lib/alerts";
 import {
   money,
   cardEnding,
@@ -14,17 +15,29 @@ import {
 import { useApp } from "./provider";
 import { run } from "@/lib/api";
 import { Badge } from "./ui";
-import { EvidenceForm, RejectForm, NoteForm } from "./forms";
+import { BenefitForm, EvidenceForm, RejectForm, NoteForm } from "./forms";
+// The full period record: amounts, conditions, enrollment and eligibility actions, notes and the
+// evidence ledger. Embedded under a benefit row it drops its own heading and border.
 export function PeriodPanel({
   period,
   initialOpen = false,
+  embedded = false,
+  benefit,
+  termsAlert,
+  actions,
 }: {
   period: Period;
   initialOpen?: boolean;
+  embedded?: boolean;
+  benefit?: Benefit;
+  termsAlert?: Alert;
+  actions?: ReactNode;
 }) {
   const { data, refresh, notice, offline } = useApp(),
     [open, setOpen] = useState(initialOpen),
-    [modal, setModal] = useState<"evidence" | "note" | "reject" | null>(null),
+    [modal, setModal] = useState<
+      "evidence" | "note" | "reject" | "terms" | null
+    >(null),
     [selected, setSelected] = useState<Evidence | undefined>(),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
@@ -38,30 +51,71 @@ export function PeriodPanel({
     unitLabel = String(snap.unit_label ?? "units");
   const amount = (n: number | null) =>
     isUnits ? (n === null ? "Not established" : `${n} ${unitLabel}`) : money(n);
-  async function enroll() {
+  const card = data.cards.find((c) => c.id === period.card_id);
+  async function confirm(
+    op: "markEnrolled" | "markEligible" | "acknowledgeAlert",
+    done: string,
+  ) {
     setBusy(true);
     setError("");
     try {
-      await run("markEnrolled", { id: period.benefit_id });
+      if (op === "acknowledgeAlert" && termsAlert)
+        await run(op, {
+          alert_key: termsAlert.key,
+          context: termsAlert.context,
+        });
+      else if (op !== "acknowledgeAlert")
+        await run(op, { id: period.benefit_id });
       await refresh();
-      notice("Enrollment marked active based on your confirmation.");
+      notice(done);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save.");
     }
     setBusy(false);
   }
   return (
-    <article className="period-panel">
-      <div className="period-heading">
-        <div>
-          <span className="eyebrow">
-            {period.card_name} · {cardEnding(period.last4)}
-          </span>
-          <h3>{period.benefit_name}</h3>
-          <p className="period-dates">{periodLabel(period)}</p>
+    <article className={`period-panel${embedded ? " embedded" : ""}`}>
+      {!embedded && (
+        <div className="period-heading">
+          <div>
+            <span className="eyebrow">
+              {period.card_name} · {cardEnding(period.last4)}
+            </span>
+            <h3>{period.benefit_name}</h3>
+            <p className="period-dates">{periodLabel(period)}</p>
+          </div>
+          <Badge period={period} />
         </div>
-        <Badge period={period} />
-      </div>
+      )}
+      {termsAlert && (
+        <div className="notice">
+          <strong>{termsAlert.title}</strong>
+          <p>{termsAlert.detail}</p>
+          <div className="settings-row-actions">
+            {benefit && card && (
+              <button
+                className="secondary"
+                disabled={busy || offline}
+                onClick={() => setModal("terms")}
+              >
+                Review and save a new version
+              </button>
+            )}
+            <button
+              className="text-button"
+              disabled={busy || offline}
+              onClick={() =>
+                void confirm(
+                  "acknowledgeAlert",
+                  "Current terms kept. This notice returns if the rule file changes again.",
+                )
+              }
+            >
+              Keep current terms
+            </button>
+          </div>
+        </div>
+      )}
       <div className="period-amounts">
         <div>
           <span>Allowance</span>
@@ -140,16 +194,37 @@ export function PeriodPanel({
               </a>
             )}
           </div>
-          {period.enrollment_required &&
-            period.enrollment_status !== "active" && (
+          <div className="period-actions-inline">
+            {period.enrollment_required &&
+              period.enrollment_status !== "active" && (
+                <button
+                  className="small-button"
+                  disabled={busy || offline}
+                  onClick={() =>
+                    void confirm(
+                      "markEnrolled",
+                      "Enrollment marked active based on your confirmation.",
+                    )
+                  }
+                >
+                  I verified enrollment is active
+                </button>
+              )}
+            {period.eligibility_status === "unknown" && (
               <button
                 className="small-button"
                 disabled={busy || offline}
-                onClick={() => void enroll()}
+                onClick={() =>
+                  void confirm(
+                    "markEligible",
+                    "Eligibility confirmed based on your check.",
+                  )
+                }
               >
-                I verified enrollment is active
+                I verified my card is eligible
               </button>
             )}
+          </div>
           {period.notes && (
             <div className="saved-note">
               <FileText size={15} />
@@ -217,7 +292,16 @@ export function PeriodPanel({
               Earlier versions of evidence remain in History.
             </p>
           )}
+          {actions && <div className="rule-actions">{actions}</div>}
         </div>
+      )}
+      {modal === "terms" && benefit && card && (
+        <BenefitForm
+          card={card}
+          previous={benefit}
+          templateId={String(termsAlert?.context.rule_id ?? "")}
+          onClose={() => setModal(null)}
+        />
       )}
       {modal === "evidence" && (
         <EvidenceForm

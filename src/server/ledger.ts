@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Tx } from "./db";
-import type { Snapshot, Period } from "@/lib/types";
+import { DEFAULT_SETTINGS, type Snapshot, type Period } from "@/lib/types";
 import { localDate } from "@/lib/domain";
 import { RULE_FILES } from "@/lib/catalog";
 
@@ -76,6 +76,23 @@ export const operations = {
   }),
   setBenefitEnabled: z.object({ id: uuid, enabled: z.boolean() }),
   markEnrolled: z.object({ id: uuid }),
+  markEligible: z.object({ id: uuid }),
+  // The owner re-read the issuer's terms and found them unchanged.
+  markReverified: z.object({ id: uuid }),
+  // One-time allowance for a period that starts inside a partial rule window.
+  confirmPeriodAllowance: z.object({
+    id: uuid,
+    amount_cents: z.number().int().min(0).nullable(),
+    units: z.number().int().min(0).nullable(),
+    note: text(4000).min(1),
+  }),
+  acknowledgeAlert: z.object({
+    alert_key: z.string().min(1).max(200),
+    context: z.record(z.string(), z.unknown()).default({}),
+  }),
+  updateSettings: z.object({
+    alert_lead_days: z.number().int().min(1).max(90),
+  }),
   ensurePeriod: z.object({ benefit_id: uuid, on: day }),
   initializeCards: z.object({}),
   addResearchedBenefits: z.object({ card_id: uuid }),
@@ -226,6 +243,26 @@ export async function addResearchedBenefits(tx: Tx, cardId: string) {
   return { added, skipped };
 }
 
+// Queries whose tables or columns may not exist yet in production, when code deploys ahead of
+// its migration. A missing relation, column or function rolls back to a savepoint and yields
+// null, so the rest of the snapshot still loads; the shell then shows which migration is pending.
+const MISSING_SCHEMA = new Set(["42P01", "42703", "42883"]);
+export async function optionalRows<T = Record<string, unknown>>(
+  tx: Tx,
+  sql: string,
+): Promise<T[] | null> {
+  await tx.query("savepoint optional_rows");
+  try {
+    const { rows } = await tx.query(sql);
+    await tx.query("release savepoint optional_rows");
+    return rows as T[];
+  } catch (e) {
+    if (!MISSING_SCHEMA.has((e as { code?: string }).code ?? "")) throw e;
+    await tx.query("rollback to savepoint optional_rows");
+    return null;
+  }
+}
+
 async function one<T>(tx: Tx, sql: string, values: unknown[]): Promise<T> {
   const { rows } = await tx.query(sql, values);
   if (rows.length !== 1)
@@ -359,6 +396,50 @@ export async function runOperation(
         [i.id],
       );
     }
+    case "markEligible": {
+      const i = input as OperationInput<"markEligible">;
+      return one(
+        tx,
+        "update public.benefits set eligibility_status='eligible' where id=$1 returning *",
+        [i.id],
+      );
+    }
+    case "markReverified": {
+      const i = input as OperationInput<"markReverified">;
+      return one(
+        tx,
+        "update public.benefits set last_reverified_at=now() where id=$1 returning *",
+        [i.id],
+      );
+    }
+    case "confirmPeriodAllowance": {
+      const i = input as OperationInput<"confirmPeriodAllowance">;
+      return one(
+        tx,
+        "select * from public.confirm_period_allowance($1,$2,$3,$4)",
+        [i.id, i.amount_cents, i.units, i.note],
+      );
+    }
+    case "acknowledgeAlert": {
+      const i = input as OperationInput<"acknowledgeAlert">;
+      // A repeated acknowledgement is a no-op; the first one is kept.
+      await tx.query(
+        `insert into public.alert_acknowledgements(alert_key,context) values($1,$2)
+         on conflict(owner_user_id,alert_key) do nothing`,
+        [i.alert_key, i.context],
+      );
+      return { acknowledged: i.alert_key };
+    }
+    case "updateSettings": {
+      const i = input as OperationInput<"updateSettings">;
+      return one(
+        tx,
+        `insert into public.user_settings(alert_lead_days) values($1)
+         on conflict(owner_user_id) do update set alert_lead_days=excluded.alert_lead_days
+         returning alert_lead_days`,
+        [i.alert_lead_days],
+      );
+    }
     case "ensurePeriod": {
       const i = input as OperationInput<"ensurePeriod">;
       return one(tx, "select * from public.ensure_period($1,$2)", [
@@ -483,7 +564,23 @@ export async function loadSnapshot(tx: Tx): Promise<Snapshot> {
   const cardArt = await tx.query(
     "select card_id, sha256, origin, bands, overlay, updated_at from public.card_art",
   );
+  const acknowledgements = await optionalRows<
+    Snapshot["acknowledgements"][number]
+  >(
+    tx,
+    "select alert_key, acknowledged_at from public.alert_acknowledgements order by acknowledged_at desc, id",
+  );
+  const settings = await optionalRows<Snapshot["settings"]>(
+    tx,
+    "select alert_lead_days from public.user_settings",
+  );
   return {
+    acknowledgements: acknowledgements ?? [],
+    settings: settings?.[0] ?? DEFAULT_SETTINGS,
+    pendingMigration:
+      acknowledgements === null || settings === null
+        ? "0005_benefit_alerts.sql"
+        : null,
     cardArt: cardArt.rows,
     accounts: accounts.rows,
     connections: connections.rows,

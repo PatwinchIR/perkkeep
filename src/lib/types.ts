@@ -1,4 +1,5 @@
 import type {
+  AcknowledgementRow,
   AuditEventRow,
   BenefitRow,
   CardRow,
@@ -6,12 +7,19 @@ import type {
   Json,
   PeriodRow,
   SyncRunRow,
+  UserSettingsRow,
 } from "./rows";
 export type Card = CardRow;
 export type Benefit = BenefitRow;
 export type Evidence = EvidenceRow;
 export type SyncRun = SyncRunRow;
 export type AuditEvent = AuditEventRow;
+export type Acknowledgement = Pick<
+  AcknowledgementRow,
+  "alert_key" | "acknowledged_at"
+>;
+export type UserSettings = Pick<UserSettingsRow, "alert_lead_days">;
+export const DEFAULT_SETTINGS: UserSettings = { alert_lead_days: 7 };
 export type Period = PeriodRow & {
   benefit_name: string;
   cadence: string;
@@ -110,6 +118,10 @@ export type Snapshot = {
   evidence: Evidence[];
   runs: SyncRun[];
   audit: AuditEvent[];
+  acknowledgements: Acknowledgement[];
+  settings: UserSettings;
+  // Set when the deployed code is ahead of the database (see optionalRows in src/server/ledger.ts).
+  pendingMigration: string | null;
   periodErrors: string[];
 };
 export type { Json };

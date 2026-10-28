@@ -53,6 +53,24 @@ export type BenefitRow = {
   unit_label: string | null;
   updated_at: string;
   verified_at: string | null;
+  last_reverified_at: string | null;
+};
+
+// public.alert_acknowledgements
+export type AcknowledgementRow = {
+  id: string;
+  owner_user_id: string;
+  alert_key: string;
+  acknowledged_at: string;
+  context: NonNullable<Json>;
+};
+
+// public.user_settings
+export type UserSettingsRow = {
+  owner_user_id: string;
+  alert_lead_days: number;
+  created_at: string;
+  updated_at: string;
 };
 
 // public.benefit_periods

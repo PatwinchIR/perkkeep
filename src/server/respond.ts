@@ -20,6 +20,12 @@ export function failure(e: unknown) {
       "rejected",
       e instanceof Error ? e.message : "Request rejected.",
     );
+  if (pgCode === "42P01" || pgCode === "42703" || pgCode === "42883")
+    return deny(
+      409,
+      "migration_pending",
+      "The database is behind this version of PerkKeep. Apply the pending migration (npm run neon:migrate), then try again.",
+    );
   if (pgCode === "42501")
     return deny(
       403,

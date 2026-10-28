@@ -12,6 +12,16 @@ export async function migrate(connectionString, log = console.log) {
   const client = new pg.Client({ connectionString });
   await client.connect();
   try {
+    await migrateWith(client, log);
+  } finally {
+    await client.end();
+  }
+}
+
+// Runs the migrations on an already connected client (pg over TCP, or Neon's WebSocket client
+// from scripts/neon-migrate.mjs). The caller owns the connection.
+export async function migrateWith(client, log = console.log) {
+  {
     await client.query(
       "select pg_advisory_lock(hashtext('perkkeep_migrations'))",
     );
@@ -62,8 +72,6 @@ export async function migrate(connectionString, log = console.log) {
         throw new Error(`${name} failed and was rolled back: ${e.message}`);
       }
     }
-  } finally {
-    await client.end();
   }
 }
 

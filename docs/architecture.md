@@ -13,13 +13,15 @@ Browser (PWA) → fixed server operations (`/api/ledger`, `/api/sources`, `/api/
 
 ## Layers (brief section 3)
 
-| Layer                                                                                         | Where                                                                               |
-| --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| Sources: SimpleFIN, Plaid Sandbox, CSV                                                        | `src/server/sources/`                                                               |
-| Data: accounts, append-only transactions, balance snapshots, coverage, holdings (schema only) | `db/migrations/0002_sources.sql`                                                    |
-| Ledger: cards, versioned benefit rules, periods, append-only evidence, audit                  | `db/migrations/0001_ledger.sql`                                                     |
-| Card art (private images)                                                                     | `db/migrations/0003_card_art.sql`, `src/server/card-art.ts`, `data/card-faces.json` |
-| Knowledge layer, matchers, recommender, MCP                                                   | Phase 2 and later                                                                   |
+| Layer                                                                                         | Where                                                                                  |
+| --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Sources: SimpleFIN, Plaid Sandbox, CSV                                                        | `src/server/sources/`                                                                  |
+| Data: accounts, append-only transactions, balance snapshots, coverage, holdings (schema only) | `db/migrations/0002_sources.sql`                                                       |
+| Ledger: cards, versioned benefit rules, periods, append-only evidence, audit                  | `db/migrations/0001_ledger.sql`                                                        |
+| Card art (private images)                                                                     | `db/migrations/0003_card_art.sql`, `src/server/card-art.ts`, `data/card-faces.json`    |
+| Knowledge layer: researched benefit rules with versions and matching hints                    | `data/benefits/*.json`, `src/lib/catalog.ts`                                           |
+| Engines: deterministic matcher; alerts and progress derived from the ledger                   | `src/server/matchers.ts`, `src/lib/alerts.ts`, `db/migrations/0005_benefit_alerts.sql` |
+| Recommender, MCP endpoint                                                                     | Phase 2 (MCP) and Phase 3                                                              |
 
 ## Data integrity
 
@@ -30,6 +32,8 @@ Browser (PWA) → fixed server operations (`/api/ledger`, `/api/sources`, `/api/
 - Confirmed and candidate amounts are separate. Refunds and reversals affect confirmed use only when the entitlement reversal is confirmed.
 - Idempotency keys reused with changed content are rejected, not overwritten.
 - Coverage is recorded separately from evidence and advances only on a successful sync. Unknown, partial and stale coverage never produces an "unused" balance.
+- Alerts are derived from the ledger on every load and never stored; acknowledgements are append-only and keyed so that a changed fact brings the alert back (D45).
+- A period that starts inside a partial rule window has no allowance until the owner confirms one, once, with a note, never above the full allowance (D48). Terms drift is detected against the rule files by recorded version (D49).
 
 ## Files
 
