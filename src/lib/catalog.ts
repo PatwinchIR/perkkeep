@@ -36,6 +36,9 @@ export type BenefitRule = {
     credit_patterns: string[];
     purchase_patterns: string[];
     patterns_verified: boolean;
+    // The date and the exact statement wording that verified the patterns.
+    patterns_verified_on?: string;
+    observed_descriptor?: string;
   };
 };
 export const RULE_FILES = [

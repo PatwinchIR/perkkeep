@@ -3,7 +3,7 @@ import { withOwner, type Tx } from "../db";
 import { runMatchersSafely } from "../matchers";
 import { decryptSecret, encryptSecret, reference } from "../crypto";
 import { localDate, shiftDays } from "@/lib/domain";
-import { simplefinAdapter } from "./simplefin";
+import { maskFrom, simplefinAdapter } from "./simplefin";
 import { plaidAdapter } from "./plaid";
 import type { SourceAdapter, SourceBatch, SyncWindow } from "./types";
 
@@ -17,9 +17,11 @@ const TZ = "America/New_York";
 // two weeks to catch pending→posted changes and late credits.
 // SimpleFIN Bridge limits each /accounts request to 90 days and expects at most about 24 requests a
 // day, disabling access tokens that exceed it (https://beta-bridge.simplefin.org/info/developers,
-// read 2026-10-28). Windows are capped at 90 days and manual syncs wait out a cooldown.
+// read 2026-10-28). Its responses also warn above 45 days ("exceeds recommended range of 45
+// days. In the future, this may be capped", seen 2026-10-28), so windows are capped at 45 days
+// and manual syncs wait out a cooldown.
 const OVERLAP_DAYS = 14,
-  MAX_WINDOW_DAYS = 90,
+  MAX_WINDOW_DAYS = 45,
   MANUAL_COOLDOWN_MS = 30 * 60 * 1000;
 export const secretLabel = (connectionId: string) =>
   `source_connection:${connectionId}`;
@@ -150,12 +152,18 @@ const PRODUCTS: {
 ];
 const MASK_SUFFIX = /\s*(?:\(|-|\s)?(?:\.\.\.|x+|\*+)?\d{4}\)?\s*$/i;
 
+// The product named in the account decides the issuer when the institution says otherwise, as
+// with Discover cards reported under Capital One.
 export function identifyAccount(a: { institution: string; name: string }) {
   const text = `${a.institution} ${a.name}`;
-  const issuer = ISSUERS.find((i) => i.institution.test(text));
-  const product = issuer
-    ? PRODUCTS.find((p) => p.issuer === issuer.name && p.pattern.test(a.name))
-    : undefined;
+  const product = PRODUCTS.find(
+    (p) =>
+      p.pattern.test(a.name) &&
+      ISSUERS.find((i) => i.name === p.issuer)!.institution.test(text),
+  );
+  const issuer = product
+    ? ISSUERS.find((i) => i.name === product.issuer)
+    : ISSUERS.find((i) => i.institution.test(text));
   return { issuer, product };
 }
 
@@ -165,14 +173,29 @@ export async function linkAccounts(tx: Tx) {
      where mapping_status='unmapped' and source in ('simplefin','plaid') order by institution, name, id`,
   );
   for (const a of accounts) {
+    // Accounts stored before the digits were read from names like "Freedom Flex (1234)".
+    if (!a.mask && maskFrom(a.name)) {
+      a.mask = maskFrom(a.name);
+      await tx.query("update public.accounts set mask=$2 where id=$1", [
+        a.id,
+        a.mask,
+      ]);
+    }
     const { issuer, product } = identifyAccount(a);
-    // Checking, savings and other accounts never become cards.
-    if (a.kind !== "credit" && !product) continue;
+    // Checking, savings, investment and loan accounts never become cards.
+    if (["depository", "investment", "loan"].includes(a.kind)) continue;
     // Without last four digits, only a named product with exactly one possible card is linked.
     if (!a.mask && !product) continue;
     await tx.query("savepoint link_account");
     try {
-      const cardId = await cardFor(tx, a, issuer, product);
+      // An account of unknown kind only links to a card that already has its issuer and digits.
+      const cardId = await cardFor(
+        tx,
+        a,
+        issuer,
+        product,
+        a.kind === "credit" || !!product,
+      );
       if (cardId) {
         await tx.query(
           `update public.accounts set card_id=$2, proposed_card_id=$2, mapping_status='confirmed', mapping_confirmed_at=now()
@@ -203,6 +226,7 @@ async function cardFor(
   a: { institution: string; name: string; mask: string | null },
   issuer: (typeof ISSUERS)[number] | undefined,
   product: (typeof PRODUCTS)[number] | undefined,
+  create: boolean,
 ): Promise<string | undefined> {
   const { rows: cards } = await tx.query(
     "select id, issuer, last4, catalog_key from public.cards",
@@ -213,6 +237,7 @@ async function cardFor(
     );
     if (sameDigits.length > 1) return undefined;
     if (sameDigits.length === 1) return sameDigits[0].id;
+    if (!create) return undefined;
   } else {
     const same = cards.filter((c) => c.catalog_key === product!.key);
     if (same.length === 1) return same[0].id;

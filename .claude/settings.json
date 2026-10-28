@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run neon:https *)",
+      "Bash(VERCEL_ORG_ID=* npm run neon:https *)",
+      "Bash(npm run neon:reconcile *)",
+      "Bash(node scripts/neon-https.mjs *)",
+      "Bash(VERCEL_ORG_ID=* npx --yes vercel@65.5.0 deploy *)",
+      "Bash(VERCEL_ORG_ID=* npx --yes vercel@65.5.0 env pull *)"
+    ]
+  }
+}

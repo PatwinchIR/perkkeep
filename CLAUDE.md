@@ -13,4 +13,4 @@ Read before working: `docs/brief.md` (goals, rules, phases), `docs/status.md` (c
 
 ## Commands
 
-`npm test` · `npm run test:e2e` · `npm run typecheck` · `npm run lint` · `npm run build` · `npm run check:client` · `npm run local:postgres` (owner's machine) · `bash scripts/cloud-postgres.sh` (cloud container) · `npm run neon:provision`
+`npm test` · `npm run test:e2e` · `npm run typecheck` · `npm run lint` · `npm run build` · `npm run check:client` · `npm run local:postgres` (owner's machine) · `bash scripts/cloud-postgres.sh` (cloud container) · `npm run neon:provision` · `npm run neon:https` and `npm run neon:reconcile` (production over port 443, D42)

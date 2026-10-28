@@ -91,9 +91,10 @@ const day = (epochSeconds: number, timeZone = "America/New_York") =>
 const epoch = (isoDay: string) =>
   Math.floor(Date.parse(`${isoDay}T00:00:00Z`) / 1000);
 
-// Card account names usually end with the last four digits; nothing else is inferred.
-function maskFrom(name: string): string | null {
-  const m = name.match(/(?:\.\.\.|x|\*|-|\s)(\d{4})\)?\s*$/i);
+// Card account names usually end with the last four digits, often in parentheses, as in
+// "Sapphire Reserve (1234)"; nothing else is inferred.
+export function maskFrom(name: string): string | null {
+  const m = name.match(/(?:\.\.\.|x|\*|-|\s|\()(\d{4})\)?\s*$/i);
   return m ? m[1] : null;
 }
 function kindFrom(name: string): SourceAccount["kind"] {

@@ -202,3 +202,49 @@ describe("period coverage", () => {
     ).toBe("unavailable");
   });
 });
+
+describe("researched benefits for a confirmed card (synthetic owner)", () => {
+  it("adds each researched rule once, skips custom windows, and leaves enrollment unknown", async () => {
+    const { runOperation } = await import("../src/server/ledger");
+    const owner = await user();
+    const unconfirmed = await insert(owner, "cards", {
+      issuer: "Chase",
+      display_name: "Synthetic Reserve",
+      catalog_key: "chase-sapphire-reserve",
+    });
+    await expect(
+      withOwner(owner.id, (tx) =>
+        runOperation(tx, "addResearchedBenefits", { card_id: unconfirmed.id }),
+      ),
+    ).rejects.toThrow(/Confirm the active card/);
+    await owner.q(
+      "update public.cards set status='active', identity_verified_at=now() where id=$1",
+      [unconfirmed.id],
+    );
+    const first = (await withOwner(owner.id, (tx) =>
+      runOperation(tx, "addResearchedBenefits", { card_id: unconfirmed.id }),
+    )) as { added: string[]; skipped: string[] };
+    expect(first.skipped).toEqual([
+      "Global Entry, TSA PreCheck or NEXUS credit",
+      "The Shops at Chase credit",
+    ]);
+    expect(first.added).toHaveLength(7);
+    const again = (await withOwner(owner.id, (tx) =>
+      runOperation(tx, "addResearchedBenefits", { card_id: unconfirmed.id }),
+    )) as { added: string[] };
+    expect(again.added).toEqual([]);
+    const rows = await owner.q(
+      "select cadence, enrollment_required, enrollment_status, eligibility_status, eligibility_rules_json->>'catalog_rule_id' as rule from public.benefits",
+    );
+    expect(rows).toHaveLength(first.added.length);
+    expect(rows.every((r) => r.eligibility_status === "eligible")).toBe(true);
+    expect(
+      rows.every((r) =>
+        r.enrollment_required
+          ? r.enrollment_status === "unknown"
+          : r.enrollment_status === "not_required",
+      ),
+    ).toBe(true);
+    expect(rows.some((r) => r.cadence === "custom")).toBe(false);
+  });
+});

@@ -19,9 +19,11 @@
       "verified": true,
       "manual": false,
       "matching": {
-        "credit_patterns": ["travel credit"],
+        "credit_patterns": ["travel credit $300/year", "travel credit"],
         "purchase_patterns": [],
-        "patterns_verified": false
+        "patterns_verified": true,
+        "patterns_verified_on": "2026-10-28",
+        "observed_descriptor": "TRAVEL CREDIT $300/YEAR"
       }
     },
     {
@@ -162,6 +164,28 @@
         "credit_patterns": ["global entry", "tsa precheck", "nexus"],
         "purchase_patterns": [],
         "patterns_verified": false
+      }
+    },
+    {
+      "id": "csr/shops-at-chase-credit",
+      "version": "2026-10-28",
+      "name": "The Shops at Chase credit",
+      "period": "custom",
+      "amount_cents": 25000,
+      "enrollment_required": false,
+      "eligibility_notes": "Up to $250 in statement credits for purchases at The Shops at Chase after spending $75,000 on the card within a calendar year. The credit is \"available for the remainder of the year in which the $75,000 was spent and through the next calendar year\"; \"no further action is needed to activate\" it. The window starts on the day the threshold is met, so it needs your dates.",
+      "source_url": "https://www.chase.com/personal/credit-cards/education/rewards-benefits/how-to-use-250-credit-shops-with-chase",
+      "checked_on": "2026-10-28",
+      "effective_from": null,
+      "effective_to": null,
+      "verified": true,
+      "manual": false,
+      "matching": {
+        "credit_patterns": ["shops at chase"],
+        "purchase_patterns": [],
+        "patterns_verified": true,
+        "patterns_verified_on": "2026-10-28",
+        "observed_descriptor": "SHOPS AT CHASE $250/YEAR"
       }
     }
   ]
