@@ -320,7 +320,8 @@ function Login({
     [loading, setLoading] = useState(false),
     [error, setError] = useState(""),
     [message, setMessage] = useState(""),
-    [create, setCreate] = useState(false);
+    [create, setCreate] = useState(false),
+    [verifying, setVerifying] = useState(false);
   const local = provider === "test";
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -336,15 +337,34 @@ function Login({
             name: name.trim(),
           }),
         );
-        setMessage("Account created. Check your email to verify it.");
+        // Neon Auth issues no session until the email is verified, so ask for the code now.
+        setVerifying(true);
+        return;
       } else authError(await authClient().signIn.email({ email, password }));
       await onSignedIn();
     } catch (e) {
+      if ((e as { code?: string }).code === "EMAIL_NOT_VERIFIED") {
+        setVerifying(true);
+        return;
+      }
       setError(errorText(e, "Sign-in failed."));
     } finally {
       setLoading(false);
     }
   }
+  if (verifying)
+    return (
+      <VerifyEmail
+        email={email}
+        backLabel="Back to sign in"
+        onDone={async () => {
+          if (password)
+            authError(await authClient().signIn.email({ email, password }));
+          await onSignedIn();
+        }}
+        onSignOut={async () => setVerifying(false)}
+      />
+    );
   async function emailCode() {
     if (!email) {
       setError("Enter your email address first.");
@@ -466,10 +486,12 @@ function VerifyEmail({
   email,
   onDone,
   onSignOut,
+  backLabel = "Sign out",
 }: {
   email: string;
   onDone: () => Promise<void>;
   onSignOut: () => Promise<void>;
+  backLabel?: string;
 }) {
   const [otp, setOtp] = useState(""),
     [loading, setLoading] = useState(false),
@@ -546,7 +568,7 @@ function VerifyEmail({
         <Mail size={16} /> Send a new code
       </button>
       <button className="text-button" onClick={() => void onSignOut()}>
-        Sign out
+        {backLabel}
       </button>
     </Welcome>
   );
