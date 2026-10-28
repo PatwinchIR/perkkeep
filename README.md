@@ -6,6 +6,15 @@ A private home for credit-card benefits. Built with Next.js App Router, TypeScri
 
 Your ledger describes the last recorded reconciliation, not a live bank balance. All historical periods, rule snapshots and evidence corrections are retained.
 
+## Project context
+
+PerkKeep is the owner's personal credit-card benefits tracker. The goal is daily use with no manual checks of issuer portals: which benefits exist, which are enrolled, how much is used and remains, when each expires, and how reliable that information is. Transactions from SimpleFIN (Plaid as a backup, CSV for history) help match benefit use. A card recommender, a browser extension and finance chat over MCP come later, behind gates.
+
+- [Engineering brief](docs/brief.md): mission, priorities, autonomy rules, architecture, phases and gates, constraints.
+- [Status and next steps](docs/status.md): what is done, what is next, and how to work in a cloud container.
+- [Decisions](docs/decisions.md): every decision made without asking, and the assumptions verified so far.
+- [Architecture](docs/architecture.md), [deployment](docs/deployment.md), and the phase reports in [docs/reports](docs/reports/).
+
 ## How data is protected
 
 - The browser never talks to the database. It calls a fixed set of server operations (`/api/ledger`). The server verifies the session, requires a verified email on the owner allowlist, and only then opens a transaction.
@@ -16,7 +25,7 @@ See [architecture](docs/architecture.md), [decisions](docs/decisions.md) and the
 
 ## Start locally
 
-Use Node 24 LTS (see `.nvmrc`) and a local PostgreSQL 16 or newer server.
+Use Node 24 LTS (see `.nvmrc`) and a local PostgreSQL 16 or newer server. In a Claude Code cloud container, run `bash scripts/cloud-postgres.sh` instead of the `local:postgres` line below.
 
 ```sh
 git clone https://github.com/PatwinchIR/perkkeep.git
