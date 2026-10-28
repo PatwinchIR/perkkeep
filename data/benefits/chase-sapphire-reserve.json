@@ -63,7 +63,9 @@
       "matching": {
         "credit_patterns": ["dining credit", "exclusive tables"],
         "purchase_patterns": [],
-        "patterns_verified": false
+        "patterns_verified": true,
+        "patterns_verified_on": "2026-10-28",
+        "observed_descriptor": "Dining Credit $300-year (as Copilot Money renders the Chase statement line; Chase's own form is expected to read DINING CREDIT $300/YEAR, like TRAVEL CREDIT $300/YEAR)"
       }
     },
     {
@@ -83,7 +85,9 @@
       "matching": {
         "credit_patterns": ["stubhub"],
         "purchase_patterns": ["stubhub", "viagogo"],
-        "patterns_verified": false
+        "patterns_verified": true,
+        "patterns_verified_on": "2026-10-28",
+        "observed_descriptor": "Stubhub Credit $300-year (as Copilot Money renders the Chase statement line; Chase's own form is expected to read STUBHUB CREDIT $300/YEAR)"
       }
     },
     {

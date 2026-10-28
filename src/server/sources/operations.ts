@@ -1,11 +1,11 @@
 import "server-only";
 import { z } from "zod";
 import { withOwner } from "../db";
-import { encryptSecret, reference, sha256 } from "../crypto";
+import { encryptSecret } from "../crypto";
 import { InputError } from "../ledger";
 import { runMatchers, runMatchersSafely } from "../matchers";
 import { claimSetupToken, setupTokenClaimUrl } from "./simplefin";
-import { parseStatement } from "./csv";
+import { importStatement } from "./import";
 import {
   defaultAdapters,
   linkAccounts,
@@ -99,110 +99,7 @@ export async function runSourceOperation(
     }
     case "importCsv": {
       const i = parsed.data as SourceOperationInput<"importCsv">;
-      let statement;
-      try {
-        statement = parseStatement(i.file_text, i.format);
-      } catch (e) {
-        throw new InputError(
-          e instanceof Error ? e.message : "Unreadable CSV.",
-        );
-      }
-      const fileHash = sha256(i.file_text);
-      return withOwner(ownerId, async (tx) => {
-        let accountId = i.account_id;
-        if (!accountId) {
-          if (!i.new_account)
-            throw new InputError("Choose an account for this file.");
-          const created = await tx.query(
-            `insert into public.accounts(source,external_ref,institution,name,mask,kind)
-             values('csv',$1,$2,$3,$4,'credit') returning id`,
-            [
-              reference("account:csv", crypto.randomUUID()),
-              i.new_account.institution,
-              i.new_account.name,
-              i.new_account.mask,
-            ],
-          );
-          accountId = created.rows[0].id as string;
-        }
-        const account = await tx.query(
-          "select id, source from public.accounts where id=$1",
-          [accountId],
-        );
-        if (account.rows[0]?.source !== "csv")
-          throw new InputError("CSV files import into CSV accounts only.");
-        // Identical rows within one file are distinct purchases, so each occurrence gets its own reference.
-        const seen = new Map<string, number>();
-        const rows = statement.rows.map((r) => {
-          const key = JSON.stringify([
-            r.transactedOn,
-            r.postedOn,
-            r.amountCents,
-            r.description,
-          ]);
-          const n = (seen.get(key) ?? 0) + 1;
-          seen.set(key, n);
-          return {
-            dedup_ref: reference(`transaction:csv:${accountId}`, `${key}#${n}`),
-            transacted_on: r.transactedOn,
-            posted_on: r.postedOn,
-            amount_cents: r.amountCents,
-            description: r.description,
-            pending: false,
-          };
-        });
-        const digest = sha256(
-          JSON.stringify({ accountId, format: statement.format.id, rows }),
-        );
-        const existing = await tx.query(
-          "select * from public.imports where file_sha256=$1",
-          [fileHash],
-        );
-        if (existing.rows[0]) {
-          if (existing.rows[0].content_digest !== digest)
-            throw new InputError(
-              "This file was already imported with different settings. Nothing was changed.",
-            );
-          return { import: existing.rows[0], replay: true };
-        }
-        const created = await tx.query(
-          `insert into public.imports(account_id,format,file_name,file_sha256,content_digest,row_count,coverage_start,coverage_end)
-           values($1,$2,$3,$4,$5,$6,$7,$8) returning *`,
-          [
-            accountId,
-            statement.format.id,
-            i.file_name,
-            fileHash,
-            digest,
-            rows.length,
-            statement.coverageStart,
-            statement.coverageEnd,
-          ],
-        );
-        const result = await tx.query(
-          "select * from public.ingest_transactions($1,'csv',$2,$3)",
-          [accountId, JSON.stringify(rows), created.rows[0].id],
-        );
-        if (statement.coverageStart && statement.coverageEnd)
-          await tx.query("select public.record_account_sync($1,$2,$3,null)", [
-            accountId,
-            statement.coverageStart,
-            statement.coverageEnd,
-          ]);
-        const matched = await runMatchersSafely(tx, "manual");
-        return {
-          matched,
-          import: created.rows[0],
-          added: result.rows[0].added,
-          unchanged: result.rows[0].unchanged,
-          format: {
-            id: statement.format.id,
-            label: statement.format.label,
-            verified: statement.format.verified,
-          },
-          replay: false,
-        };
-      });
+      return withOwner(ownerId, (tx) => importStatement(tx, i));
     }
     case "runMatchers":
       // Links any synced accounts first, without another request to the source.

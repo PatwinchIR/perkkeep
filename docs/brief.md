@@ -55,7 +55,7 @@ As built (see [architecture](architecture.md)): Next.js 16 App Router PWA → fi
 | Primary transaction source | SimpleFIN Bridge, through a pluggable source adapter.                                                                       |
 | Backup source              | Plaid Trial (free, 10 lifetime Production Items). Sandbox only until the owner decides.                                     |
 | Excluded sources           | Era Context, ChatGPT Finances as a data source, any paid aggregator.                                                        |
-| History backfill           | CSV import: Copilot Money's format once a sample exists, issuer formats meanwhile.                                          |
+| History backfill           | CSV import: Copilot Money's export (verified 2026-10-28, D53) and issuer formats.                                           |
 | AI matching                | Through PerkKeep's own MCP endpoint, called by Claude or ChatGPT. No server-side model API calls.                           |
 | AI authority               | AI proposes matches with recorded provenance. Only issuer credit evidence or owner confirmation changes a balance.          |
 | Point valuations           | Owner-configured, labeled as the owner's assumption everywhere. No built-in defaults.                                       |
@@ -105,7 +105,7 @@ Within a phase: finish, verify, document, commit and push before starting the ne
 | ---------------------------------------------------------------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------- |
 | SimpleFIN setup token                                                        | Phase 1 gate       | The owner has it on their Mac. It goes into the deployed Settings page, never into chat or a cloud environment. |
 | Plaid Sandbox client id and secret                                           | Plaid adapter test | Missing                                                                                                         |
-| Copilot Money CSV sample                                                     | Backfill format    | Missing                                                                                                         |
+| Copilot Money CSV sample                                                     | Backfill format    | Provided 2026-10-28; layout verified and imported (D53). The file itself stays out of the repository.           |
 | Confirmation of each account-to-card link, including the unidentified record | Balances           | After the first sync                                                                                            |
 | Owner connects Claude.ai (optionally ChatGPT) to the MCP endpoint            | Phase 2            | Later                                                                                                           |
 | Point valuations                                                             | Phase 3            | Later                                                                                                           |
