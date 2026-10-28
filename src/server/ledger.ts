@@ -337,7 +337,12 @@ export async function loadSnapshot(tx: Tx): Promise<Snapshot> {
   const imports = await tx.query(
     "select id, account_id, format, file_name, row_count, coverage_start, coverage_end, created_at from public.imports order by created_at desc limit 50",
   );
+  // Image bytes are served separately by /api/card-art/[id].
+  const cardArt = await tx.query(
+    "select card_id, sha256, origin, bands, overlay, updated_at from public.card_art",
+  );
   return {
+    cardArt: cardArt.rows,
     accounts: accounts.rows,
     connections: connections.rows,
     syncs: syncs.rows,

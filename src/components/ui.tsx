@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, type CSSProperties, type ReactNode } from "react";
 import { X, ArrowUpRight, Leaf } from "lucide-react";
 import Link from "next/link";
 import type { Period, Card } from "@/lib/types";
@@ -10,6 +10,8 @@ import {
   knownAvailable,
   cardEnding,
 } from "@/lib/domain";
+import { faceFor } from "@/lib/card-faces";
+import { useApp } from "./provider";
 export function Dialog({
   title,
   children,
@@ -90,25 +92,90 @@ export function PageHeading({
     </div>
   );
 }
+// Private card art when the owner has stored it; otherwise a neutral face in the issuer's color
+// family with the product name as text and no logos. Name and last four are CSS text overlays.
+export function CardFace({
+  card,
+  large = false,
+}: {
+  card: Card;
+  large?: boolean;
+}) {
+  const { data, session } = useApp();
+  const face = faceFor(card),
+    art = data.cardArt.find((a) => a.card_id === card.id);
+  const style = {
+    "--face-a": face.placeholder[0],
+    "--face-b": face.placeholder[1],
+    color: face.text,
+  } as CSSProperties;
+  const overlay = !art || art.overlay;
+  const at = (p: { x: number; y: number }) => ({
+    left: `${p.x}%`,
+    top: `${p.y}%`,
+  });
+  return (
+    <div
+      className={`card-face${large ? " large" : ""}${art ? " has-art" : ""}`}
+      style={style}
+    >
+      {art ? (
+        <>
+          {/* eslint-disable-next-line @next/next/no-img-element -- private, uncached image */}
+          <img
+            className="face-art"
+            src={`/api/card-art/${card.id}?v=${art.sha256.slice(0, 12)}`}
+            alt=""
+          />
+          {art.bands.map((b, i) => (
+            <span
+              key={i}
+              className="face-band"
+              style={{
+                left: `${b.x}%`,
+                top: `${b.y}%`,
+                width: `${b.w}%`,
+                height: `${b.h}%`,
+                background: b.color,
+                boxShadow: `0 0 1.4cqw 0.7cqw ${b.color}`,
+              }}
+            />
+          ))}
+        </>
+      ) : (
+        <>
+          <div>
+            <span className="card-issuer">{card.issuer}</span>
+            <ArrowUpRight size={19} />
+          </div>
+          <strong>{card.product_name ?? card.display_name}</strong>
+          <span className="chip" />
+        </>
+      )}
+      {overlay && session.name && (
+        <span className="face-text face-name" style={at(face.name)}>
+          {session.name}
+        </span>
+      )}
+      {overlay && (
+        <span className="face-text card-digits" style={at(face.number)}>
+          {art && !card.last4
+            ? ""
+            : face.digitsOnly && card.last4
+              ? card.last4
+              : cardEnding(card.last4)}
+        </span>
+      )}
+    </div>
+  );
+}
 export function CardTile({ card, periods }: { card: Card; periods: Period[] }) {
   const known = periods
     .map((p) => knownAvailable(p))
     .filter((n): n is number => n !== null);
   return (
     <Link href={`/cards/${card.id}`} className="card-tile">
-      <div
-        className={`card-face ${card.issuer === "American Express" ? "amex" : card.issuer === "Discover" ? "discover" : "chase"}`}
-      >
-        <div>
-          <span className="card-issuer">{card.issuer}</span>
-          <ArrowUpRight size={19} />
-        </div>
-        <strong>{card.display_name}</strong>
-        <div>
-          <span className="chip" />
-          <span className="card-digits">{cardEnding(card.last4)}</span>
-        </div>
-      </div>
+      <CardFace card={card} />
       <div className="card-tile-details">
         <strong>
           {card.identity_verified_at

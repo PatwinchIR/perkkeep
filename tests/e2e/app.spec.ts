@@ -381,3 +381,69 @@ test("imports a synthetic statement CSV, shows its coverage, and links the accou
   const [account] = await owner.q("select mapping_status from public.accounts");
   expect(account.mapping_status).toBe("confirmed");
 });
+
+test("uploads private card art, serves it uncached to its owner only, and keeps the unidentified card plain", async ({
+  page,
+  playwright,
+}) => {
+  const { default: sharp } = await import("sharp");
+  const owner = await user();
+  await owner.q("select public.initialize_cards()");
+  await login(page, owner);
+  const [card] = await owner.q(
+    "select id from public.cards where catalog_key='discover-it'",
+  );
+  await page.goto(`/cards/${card.id}`);
+  await page
+    .getByLabel("Draw my name and last four on uploaded images")
+    .check();
+  await page
+    .getByLabel("Upload an image or a photo of your card")
+    .setInputFiles({
+      name: "synthetic-card.png",
+      mimeType: "image/png",
+      buffer: await sharp({
+        create: { width: 640, height: 400, channels: 3, background: "#3c7fb0" },
+      })
+        .png()
+        .toBuffer(),
+    });
+  const art = page.locator(".card-art-panel img.face-art");
+  await expect(art).toBeVisible();
+  const src = (await art.getAttribute("src"))!;
+  const response = await page.request.get(src);
+  expect(response.status()).toBe(200);
+  expect(response.headers()["content-type"]).toBe("image/webp");
+  expect(response.headers()["cache-control"]).toBe("private, no-store");
+  const stranger = await playwright.request.newContext({
+    baseURL: "http://127.0.0.1:3017",
+  });
+  await stranger.post("/api/test-auth", {
+    headers: { "x-perkkeep-test-secret": env.TEST_AUTH_SECRET },
+    data: { email: "owner2@perkkeep.test" },
+  });
+  expect((await stranger.get(src)).status()).toBe(404);
+  expect(
+    (
+      await playwright.request
+        .newContext({ baseURL: "http://127.0.0.1:3017" })
+        .then((c) => c.get(src))
+    ).status(),
+  ).toBe(401);
+  const [unidentified] = await owner.q(
+    "select id from public.cards where catalog_key='chase-unidentified'",
+  );
+  await page.goto(`/cards/${unidentified.id}`);
+  await expect(
+    page.getByText(
+      "This card keeps a plain face until its product is confirmed.",
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Use the issuer’s image" }),
+  ).toHaveCount(0);
+  await page.goto(`/cards/${card.id}`);
+  await page.getByRole("button", { name: "Remove image" }).click();
+  await expect(page.locator(".card-art-panel img.face-art")).toHaveCount(0);
+  await noOverflow(page);
+});

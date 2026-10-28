@@ -23,7 +23,8 @@ import { ArrowUpRight, Leaf, LockKeyhole, Mail } from "lucide-react";
 
 type AppContext = {
   data: Snapshot;
-  session: { email: string; name: string | null };
+  session: { email: string; name: string | null; provider: "neon" | "test" };
+  reloadSession: () => Promise<void>;
   refresh: () => Promise<void>;
   signOut: () => Promise<void>;
   busy: boolean;
@@ -37,6 +38,7 @@ export function useApp() {
   return value;
 }
 const EMPTY: Snapshot = {
+  cardArt: [],
   accounts: [],
   connections: [],
   syncs: [],
@@ -224,7 +226,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     <Context.Provider
       value={{
         data,
-        session: { email: session.email, name: session.name },
+        session: {
+          email: session.email,
+          name: session.name,
+          provider: session.provider ?? "neon",
+        },
+        reloadSession: checkSession,
         refresh,
         signOut,
         busy,
@@ -308,6 +315,7 @@ function Login({
   onSignedIn: () => Promise<void>;
 }) {
   const [email, setEmail] = useState(""),
+    [name, setName] = useState(""),
     [password, setPassword] = useState(""),
     [loading, setLoading] = useState(false),
     [error, setError] = useState(""),
@@ -325,7 +333,7 @@ function Login({
           await authClient().signUp.email({
             email,
             password,
-            name: email.split("@")[0],
+            name: name.trim(),
           }),
         );
         setMessage("Account created. Check your email to verify it.");
@@ -385,6 +393,18 @@ function Login({
             placeholder="you@example.com"
           />
         </label>
+        {!local && create && (
+          <label>
+            Your name, as printed on your cards
+            <input
+              autoComplete="name"
+              required
+              maxLength={60}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </label>
+        )}
         {!local && (
           <label>
             Password

@@ -20,6 +20,8 @@ import { CardTile, Empty, PageHeading } from "./ui";
 import { PeriodPanel } from "./period-panel";
 import { BenefitForm, CardForm, CoverageForm } from "./forms";
 import { SourcesPanel } from "./sources";
+import { CardArtPanel } from "./card-art";
+import { authClient } from "@/lib/auth-client";
 import {
   activePeriod,
   cardEnding,
@@ -427,6 +429,7 @@ export function CardScreen({ id }: { id: string }) {
           </button>
         }
       />
+      <CardArtPanel card={card} />
       {!card.identity_verified_at && (
         <div className="notice">
           <strong>First, make sure this is the right card.</strong>
@@ -865,6 +868,7 @@ export function SettingsScreen() {
           </p>
         </section>
       </div>
+      <NameOnCards />
       <SourcesPanel />
       <div className="section-heading">
         <h2>Reconciliation log</h2>
@@ -924,5 +928,52 @@ export function SettingsScreen() {
         />
       )}
     </>
+  );
+}
+
+// The card overlay name comes from the owner's sign-in profile, never from source code.
+function NameOnCards() {
+  const { session, reloadSession, notice, offline } = useApp(),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
+  if (session.provider !== "neon") return null;
+  async function save(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const name = String(new FormData(e.currentTarget).get("name") ?? "").trim();
+    setBusy(true);
+    setError("");
+    try {
+      const { error } = await authClient().updateUser({ name });
+      if (error) throw new Error(error.message ?? "Could not save your name.");
+      await reloadSession();
+      notice("Name on cards updated.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save your name.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <form className="settings-card form-stack name-on-cards" onSubmit={save}>
+      <h2>Name on your cards</h2>
+      <label>
+        Name
+        <input
+          name="name"
+          required
+          maxLength={60}
+          defaultValue={session.name ?? ""}
+          autoComplete="name"
+        />
+      </label>
+      {error && (
+        <p role="alert" className="form-error">
+          {error}
+        </p>
+      )}
+      <button className="secondary" disabled={busy || offline}>
+        Save name
+      </button>
+    </form>
   );
 }

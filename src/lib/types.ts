@@ -83,7 +83,16 @@ export type ImportRecord = {
   coverage_end: string | null;
   created_at: string;
 };
+export type CardArt = {
+  card_id: string;
+  sha256: string;
+  origin: "issuer" | "upload";
+  bands: { x: number; y: number; w: number; h: number; color: string }[];
+  overlay: boolean;
+  updated_at: string;
+};
 export type Snapshot = {
+  cardArt: CardArt[];
   accounts: Account[];
   connections: Connection[];
   syncs: SourceSync[];

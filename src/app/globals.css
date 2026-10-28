@@ -665,7 +665,16 @@ small {
 .card-face {
   border-radius: 10px;
   padding: 18px 19px 17px;
-  min-height: 157px;
+  aspect-ratio: 1.586;
+  container-type: inline-size;
+  background: linear-gradient(
+    125deg,
+    var(--face-a, #4a5a55),
+    var(--face-b, #2f3d39)
+  );
+  box-shadow:
+    0 1px 2px #0000001f,
+    0 6px 16px #0000001a;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -2051,4 +2060,83 @@ dialog::backdrop {
     align-items: stretch;
     min-width: 0;
   }
+}
+.card-face.has-art {
+  padding: 0;
+}
+.card-face.has-art::after {
+  display: none;
+}
+.face-art,
+.face-band {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.face-art {
+  object-fit: cover;
+}
+.face-band {
+  inset: auto;
+  border-radius: 1.2cqw;
+}
+.face-text {
+  position: absolute;
+  font-family: "OCR A Std", "Courier New", monospace;
+  font-size: 5cqw;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+  white-space: nowrap;
+  text-shadow: 0 1px 1px #00000038;
+}
+.card-face .card-digits.face-text {
+  font-size: 4.6cqw;
+  opacity: 0.92;
+}
+.card-face.large {
+  max-width: 420px;
+}
+.card-art-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 420px) minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+  margin: 0 0 30px;
+}
+.card-art-panel h2 {
+  font-size: 18px;
+  margin: 0;
+}
+.card-art-panel .hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+}
+@media (max-width: 720px) {
+  .card-art-panel {
+    grid-template-columns: 1fr;
+  }
+}
+.name-on-cards {
+  margin-top: 20px;
+  max-width: 520px;
+}
+.card-face:not(.has-art) .chip {
+  position: absolute;
+  left: 7%;
+  top: 34%;
+  width: 11%;
+  height: auto;
+  aspect-ratio: 1.3;
+}
+.card-face:not(.has-art) > strong {
+  position: absolute;
+  left: 7%;
+  right: 7%;
+  top: 52%;
+  margin: 0;
+  font-size: max(15px, 5.4cqw);
+  line-height: 1.15;
 }

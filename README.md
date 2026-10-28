@@ -51,8 +51,9 @@ Earlier versions stored data in a local Supabase stack. That data is not migrate
 
 ## Structure
 
-- `db/migrations/`: PostgreSQL schema, ownership policies, immutable snapshots, correction ledger, transactional reconciliation and audit triggers.
-- `src/server/`: database pool, session verification, owner access checks and the fixed ledger operations.
+- `db/migrations/`: PostgreSQL schema, ownership policies, immutable snapshots, correction ledger, transactional reconciliation, audit triggers, append-only source transactions and private card art.
+- `data/card-faces.json`: public card face layout (placeholder colors, allowlisted issuer image URLs, cover bands and text positions).
+- `src/server/`: database pool, session verification, owner access checks, the fixed ledger operations, source adapters (SimpleFIN, Plaid Sandbox, CSV) and card image normalization.
 - `src/app/api/`: ledger, session and auth routes.
 - `src/lib/`: shared types, date, status and coverage calculations, catalog and the browser API client.
 - `src/components/`: app shell, dashboard, cards, review, history, settings and forms.
