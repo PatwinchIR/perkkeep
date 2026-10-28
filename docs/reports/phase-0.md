@@ -22,8 +22,9 @@ Date: 2026-10-28. Branch: `claude/gallant-cray-jewnhr`, based on published commi
 
 ## 1. Deployed URL and commit
 
-- Deployed URL: none. Nothing was deployed from this session.
-- Commit: the head of `claude/gallant-cray-jewnhr` (draft pull request linked in chat).
+- Deployed URL: https://perkkeep.vercel.app, a production deployment created on 2026-10-28 at 19:23 UTC with `vercel deploy --prod`.
+- Commit: `70608f4` on `claude/gallant-cray-jewnhr`, according to the deploying session's notes above. A CLI deployment carries no Git metadata, so the commit was not confirmed from Vercel.
+- Independent anonymous check (2026-10-28, 19:27 UTC, from a second cloud session): `/api/session` reports provider `neon` and signed out; `/api/ledger`, `/api/sources`, `/api/card-art/[id]` and `/api/cron/sync` return 401 without a session; a cross-origin `POST /api/ledger` returns 403; `POST /api/test-auth` returns 404; API responses and `/sw.js` send `no-store`; the deployed service worker caches only `/offline.html` and two icons; HSTS, `X-Frame-Options: DENY`, `nosniff`, `no-referrer` and the permissions policy are present.
 
 ## 2. Tests run and results
 
