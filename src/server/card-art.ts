@@ -12,6 +12,8 @@ const MAX_INPUT = 8 * 1024 * 1024;
 export async function normalizeCardImage(
   input: Buffer,
   origin: "issuer" | "upload",
+  // Pixel region of one card when an issuer image shows several designs.
+  crop?: { left: number; top: number; width: number; height: number },
 ) {
   if (!input.length || input.length > MAX_INPUT)
     throw new Error("Images must be under 8 MB.");
@@ -22,6 +24,8 @@ export async function normalizeCardImage(
   const meta = await sharp(input).metadata();
   if (!["png", "jpeg", "webp", "avif", "heif"].includes(meta.format ?? ""))
     throw new Error("Use a PNG, JPEG, WebP or HEIF image.");
+  if (origin === "issuer" && crop)
+    image = sharp(await image.extract(crop).toBuffer());
   if (origin === "issuer" && meta.hasAlpha)
     image = sharp(await image.trim().toBuffer());
   const bytes = await image
@@ -44,6 +48,7 @@ export async function fetchIssuerImage(
       "www.aexp-static.com",
       "icm.aexp-static.com",
       "creditcards.chase.com",
+      "ecm.capitalone.com",
     ].includes(allowed.hostname)
   )
     throw new Error("Image host is not allowlisted.");

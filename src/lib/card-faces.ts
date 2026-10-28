@@ -17,7 +17,12 @@ export type Face = {
   number: Point;
   // Some products print only the last four digits, without the masking dots.
   digitsOnly: boolean;
-  art?: { page: string; image: string; bands: Band[] };
+  art?: {
+    page: string;
+    image: string;
+    bands: Band[];
+    crop?: { left: number; top: number; width: number; height: number };
+  };
 };
 type Entry = Partial<Omit<Face, "key" | "placeholder">> & {
   match?: string[];
@@ -52,4 +57,20 @@ export function faceFor(
     digitsOnly: entry.digitsOnly === true,
     art: key === "chase-unidentified" ? undefined : entry.art,
   };
+}
+
+// Product names with a known face, for suggestions when the owner adds a card by hand.
+export const KNOWN_PRODUCTS = Object.values(products)
+  .map((p) => p.match?.[0])
+  .filter((name): name is string => !!name);
+
+const ISSUERS: [RegExp, string][] = [
+  [/^american express/i, "American Express"],
+  [/^chase|prime visa/i, "Chase"],
+  [/^discover/i, "Discover"],
+  [/^citi/i, "Citi"],
+  [/^apple card/i, "Apple"],
+];
+export function issuerFor(product: string): string | null {
+  return ISSUERS.find(([pattern]) => pattern.test(product.trim()))?.[1] ?? null;
 }

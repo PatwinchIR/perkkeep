@@ -25,6 +25,17 @@ export const operations = {
     cardmember_anchor_date: nullableDay,
     issuer_timezone: text(64).min(1),
   }),
+  addCard: z.object({
+    issuer: text(100).min(1),
+    display_name: text(100).min(1),
+    product_name: text(150).nullable(),
+    last4: z
+      .string()
+      .regex(/^[0-9]{4}$/)
+      .nullable(),
+  }),
+  archiveCard: z.object({ id: uuid }),
+  restoreCard: z.object({ id: uuid }),
   createBenefit: z.object({
     card_id: uuid,
     name: text(150).min(1),
@@ -252,6 +263,41 @@ export async function runOperation(
         ],
       );
     }
+    case "addCard": {
+      // A card added by hand starts unverified, like every starter card.
+      const i = input as OperationInput<"addCard">;
+      await tx.query("savepoint add_card");
+      try {
+        return await one(
+          tx,
+          `insert into public.cards(issuer,display_name,product_name,last4)
+           values($1,$2,$3,$4) returning *`,
+          [
+            i.issuer.trim(),
+            i.display_name.trim(),
+            i.product_name?.trim() || null,
+            i.last4,
+          ],
+        );
+      } catch (e) {
+        if ((e as { code?: string }).code !== "23505") throw e;
+        await tx.query("rollback to savepoint add_card");
+        throw new InputError(
+          `You already have a ${i.issuer.trim()} card ending in ${i.last4}.`,
+        );
+      }
+    }
+    case "archiveCard":
+    case "restoreCard": {
+      const i = input as OperationInput<"archiveCard">;
+      return one(
+        tx,
+        op === "archiveCard"
+          ? "update public.cards set archived_at=now() where id=$1 and archived_at is null returning *"
+          : "update public.cards set archived_at=null where id=$1 and archived_at is not null returning *",
+        [i.id],
+      );
+    }
     case "addResearchedBenefits": {
       const i = input as OperationInput<"addResearchedBenefits">;
       return addResearchedBenefits(tx, i.card_id);
@@ -365,7 +411,8 @@ export async function loadSnapshot(tx: Tx): Promise<Snapshot> {
     await tx.query(
       `select * from public.cards c
        where not (
-         c.last4 is null and c.identity_verified_at is null
+         c.catalog_key is not null
+         and c.last4 is null and c.identity_verified_at is null
          and exists(select 1 from public.accounts a where a.mapping_status='confirmed')
          and not exists(select 1 from public.accounts a where a.card_id=c.id or a.proposed_card_id=c.id)
          and not exists(select 1 from public.benefits b where b.card_id=c.id)
@@ -383,6 +430,7 @@ export async function loadSnapshot(tx: Tx): Promise<Snapshot> {
     if (!(
       b.enabled &&
       card?.status === "active" &&
+      !card.archived_at &&
       b.effective_from <= today &&
       (!b.effective_to || b.effective_to > today)
     ))

@@ -98,6 +98,7 @@ export async function POST(request: Request, context: Context) {
       const normalized = await normalizeCardImage(
         await fetchIssuerImage(art.image),
         "issuer",
+        art.crop,
       );
       stored = {
         origin: "issuer",
