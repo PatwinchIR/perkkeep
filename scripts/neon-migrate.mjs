@@ -5,18 +5,19 @@
 //
 //   npm run neon:migrate [-- --database perkkeep]
 //
-// Credentials come from .local/neon.https.env (Git-ignored). If it is missing and VERCEL_TOKEN,
-// VERCEL_ORG_ID and VERCEL_PROJECT_ID are set, the production variables are pulled into it first.
-// Never prints connection strings or secrets.
+// Credentials come from .local/neon.https.env or .local/neon.production.env (both Git-ignored,
+// both written by `vercel env pull`). If neither exists and VERCEL_TOKEN, VERCEL_ORG_ID and
+// VERCEL_PROJECT_ID are set, the production variables are pulled first. Never prints connection
+// strings or secrets. Unlike neon:provision, this never touches the perkkeep_app role or its password.
 import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readFileSync } from "node:fs";
-import { EnvHttpProxyAgent, setGlobalDispatcher, WebSocket } from "undici";
 import { neonConfig, Client } from "@neondatabase/serverless";
 import { migrateWith } from "./db-migrate.mjs";
 
-const ENV_FILE = ".local/neon.https.env";
+const ENV_FILES = [".local/neon.https.env", ".local/neon.production.env"];
 const args = process.argv.slice(2);
 const database = args[args.indexOf("--database") + 1];
+const ENV_FILE = ENV_FILES.find((f) => existsSync(f)) ?? ENV_FILES[0];
 if (!existsSync(ENV_FILE)) {
   const { VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID } = process.env;
   if (!VERCEL_TOKEN || !VERCEL_ORG_ID || !VERCEL_PROJECT_ID)
@@ -49,9 +50,17 @@ const env = Object.fromEntries(
     .filter(Boolean)
     .map((m) => [m[1], m[2]]),
 );
-// Honors HTTPS_PROXY where one is set (cloud containers); connects directly elsewhere.
-setGlobalDispatcher(new EnvHttpProxyAgent());
-neonConfig.webSocketConstructor = WebSocket;
+// Behind HTTPS_PROXY (cloud containers) the WebSocket goes through undici's proxy agent; elsewhere
+// Node's own WebSocket (Node 22 and later) is enough, so a plain checkout needs nothing extra.
+if (process.env.HTTPS_PROXY || process.env.https_proxy) {
+  const { EnvHttpProxyAgent, setGlobalDispatcher, WebSocket } =
+    await import("undici");
+  setGlobalDispatcher(new EnvHttpProxyAgent());
+  neonConfig.webSocketConstructor = WebSocket;
+} else if (typeof globalThis.WebSocket !== "function") {
+  const { WebSocket } = await import("undici");
+  neonConfig.webSocketConstructor = WebSocket;
+}
 // Migrations need a direct connection: session advisory locks do not survive transaction pooling.
 const url = new URL(env.DATABASE_URL_UNPOOLED ?? env.DATABASE_URL);
 url.pathname = `/${args.includes("--database") && database ? database : "perkkeep"}`;
