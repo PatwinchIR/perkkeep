@@ -1,12 +1,23 @@
 import { test, expect, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
-import { fixture, ok, user } from "../helpers";
+import {
+  ensurePeriod,
+  env,
+  fixture,
+  recordEvidence,
+  user as syntheticUser,
+} from "../helpers";
 import { localDate } from "../../src/lib/domain";
+// Synthetic owners on the local test allowlist; each test gets a fresh owner identity.
+const OWNER_EMAIL = "owner@perkkeep.test";
+const user = () => syntheticUser(OWNER_EMAIL);
 async function login(page: Page, owner: Awaited<ReturnType<typeof user>>) {
+  const response = await page.request.post("/api/test-auth", {
+    headers: { "x-perkkeep-test-secret": env.TEST_AUTH_SECRET },
+    data: { email: owner.email, subject: owner.subject },
+  });
+  expect(response.ok()).toBe(true);
   await page.goto("/");
-  await page.getByLabel("Email address").fill(owner.email);
-  await page.getByLabel("Password", { exact: true }).fill(owner.password);
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Good things, kept in view." }),
   ).toBeVisible();
@@ -65,12 +76,9 @@ test("creates the nine-card collection, verifies identity and adds a rule throug
     page.getByText("Coverage unavailable", { exact: false }),
   ).toBeVisible();
   await noOverflow(page);
-  const saved = ok(
-    await owner.client
-      .from("benefits")
-      .select()
-      .eq("name", "Synthetic browser-test benefit"),
-  );
+  const saved = await owner.q("select * from public.benefits where name=$1", [
+    "Synthetic browser-test benefit",
+  ]);
   expect(saved).toHaveLength(1);
 });
 
@@ -78,7 +86,7 @@ test("records, corrects and rejects evidence with actual persistence and preserv
   page,
 }) => {
   const owner = await user(),
-    { card, period } = await fixture(owner.client, "monthly", {}, localDate());
+    { card, period } = await fixture(owner, "monthly", {}, localDate());
   await login(page, owner);
   await page.goto(`/cards/${card.id}`);
   await page
@@ -95,20 +103,16 @@ test("records, corrects and rejects evidence with actual persistence and preserv
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.reload();
   await expect(page.locator(".period-amounts")).toContainText("$3");
-  const candidate = ok(
-    await owner.client.rpc("record_evidence", {
-      p_record: {
-        benefit_period_id: period.id,
-        source_type: "purchase",
-        transaction_date: period.period_start,
-        amount_cents: 400,
-        confidence: "candidate",
-        eligibility_result: "eligible",
-        recorded_by: "import",
-        notes: "Synthetic imported candidate",
-      },
-    }),
-  );
+  const candidate = await recordEvidence(owner, {
+    benefit_period_id: period.id,
+    source_type: "purchase",
+    transaction_date: period.period_start,
+    amount_cents: 400,
+    confidence: "candidate",
+    eligibility_result: "eligible",
+    recorded_by: "import",
+    notes: "Synthetic imported candidate",
+  });
   await page.getByRole("button", { name: "Refresh records" }).click();
   await page.getByRole("button", { name: /Evidence \(/ }).click();
   await page.getByRole("button", { name: "Review candidate" }).click();
@@ -121,27 +125,23 @@ test("records, corrects and rejects evidence with actual persistence and preserv
   await page.getByRole("button", { name: "Save correction" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.locator(".period-amounts")).toContainText("$7");
-  const rows = ok(
-    await owner.client
-      .from("redemption_evidence")
-      .select()
-      .eq("benefit_period_id", period.id),
+  const rows = await owner.q(
+    "select * from public.redemption_evidence where benefit_period_id=$1",
+    [period.id],
   );
   expect(rows).toHaveLength(3);
   expect(
-    rows.find((e) => e.supersedes_evidence_id === candidate.id).confidence,
+    rows.find((e) => e.supersedes_evidence_id === candidate.id)?.confidence,
   ).toBe("confirmed");
-  await owner.client.rpc("record_evidence", {
-    p_record: {
-      id: randomUUID(),
-      benefit_period_id: period.id,
-      source_type: "purchase",
-      transaction_date: period.period_start,
-      amount_cents: 100,
-      confidence: "candidate",
-      eligibility_result: "eligible",
-      recorded_by: "import",
-    },
+  await recordEvidence(owner, {
+    id: randomUUID(),
+    benefit_period_id: period.id,
+    source_type: "purchase",
+    transaction_date: period.period_start,
+    amount_cents: 100,
+    confidence: "candidate",
+    eligibility_result: "eligible",
+    recorded_by: "import",
   });
   await page.getByRole("button", { name: "Refresh records" }).click();
   await page.getByRole("button", { name: "Reject candidate" }).click();
@@ -170,18 +170,14 @@ test("records explicit coverage, shows honest totals, and keeps old periods acro
   page,
 }) => {
   const owner = await user(),
-    { period, benefit } = await fixture(
-      owner.client,
-      "monthly",
-      {},
-      localDate(),
-    );
-  await owner.client.rpc("ensure_period", {
-    p_benefit_id: benefit.id,
-    p_on: new Date(new Date().getFullYear(), new Date().getMonth() - 1, 15, 12)
+    { period, benefit } = await fixture(owner, "monthly", {}, localDate());
+  await ensurePeriod(
+    owner,
+    benefit.id,
+    new Date(new Date().getFullYear(), new Date().getMonth() - 1, 15, 12)
       .toISOString()
       .slice(0, 10),
-  });
+  );
   await login(page, owner);
   await expect(page.locator(".summary-value")).toHaveText("—");
   await page.goto("/settings");
@@ -211,7 +207,9 @@ test("records explicit coverage, shows honest totals, and keeps old periods acro
   await page.reload();
   await expect(page.locator(".period-panel")).toHaveCount(2);
   expect(
-    ok(await owner.client.from("benefit_periods").select().eq("id", period.id)),
+    await owner.q("select * from public.benefit_periods where id=$1", [
+      period.id,
+    ]),
   ).toHaveLength(1);
 });
 
@@ -221,7 +219,7 @@ test("isolates sessions on sign-out and has an installable manifest with a priva
   request,
 }, testInfo) => {
   const owner = await user();
-  await owner.client.rpc("initialize_cards");
+  await owner.q("select public.initialize_cards()");
   await login(page, owner);
   await page.screenshot({
     path: `.local/${testInfo.project.name}-overview.png`,
@@ -252,8 +250,10 @@ test("isolates sessions on sign-out and has an installable manifest with a priva
   await expect(
     page.getByRole("heading", { name: "Welcome back." }),
   ).toBeVisible();
-  const other = await user();
-  await login(page, other);
+  // A different person signs in through the local sign-in form and sees an empty ledger.
+  await page.goto("/");
+  await page.getByLabel("Email address").fill("owner2@perkkeep.test");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByText("Let’s get your cards together.")).toBeVisible();
   await expect(page.locator(".card-tile")).toHaveCount(0);
   if (testInfo.project.name.startsWith("chromium")) {
@@ -270,7 +270,7 @@ test("has accessible login, overview, and card review screens", async ({
 }) => {
   const { default: AxeBuilder } = await import("@axe-core/playwright");
   const owner = await user();
-  await owner.client.rpc("initialize_cards");
+  await owner.q("select public.initialize_cards()");
   await page.goto("/");
   let audit = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
@@ -312,7 +312,7 @@ test("shows both Ink cards without invented digits and saves last-four edits", a
   page,
 }) => {
   const owner = await user();
-  await owner.client.rpc("initialize_cards");
+  await owner.q("select public.initialize_cards()");
   await login(page, owner);
   await expect(
     page.getByRole("link").filter({ hasText: "Ink Business Cash" }),
@@ -331,11 +331,10 @@ test("shows both Ink cards without invented digits and saves last-four edits", a
   await page.reload();
   await expect(page.locator(".page-heading .eyebrow")).toContainText("0555");
   expect(
-    ok(
-      await owner.client
-        .from("cards")
-        .select()
-        .eq("product_name", "Chase Ink Business Cash"),
+    (
+      await owner.q("select * from public.cards where product_name=$1", [
+        "Chase Ink Business Cash",
+      ])
     ).map((c) => c.last4),
   ).toEqual(["0555"]);
   await noOverflow(page);

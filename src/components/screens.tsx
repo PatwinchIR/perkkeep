@@ -15,6 +15,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import { useApp } from "./provider";
+import { run } from "@/lib/api";
 import { CardTile, Empty, PageHeading } from "./ui";
 import { PeriodPanel } from "./period-panel";
 import { BenefitForm, CardForm, CoverageForm } from "./forms";
@@ -33,7 +34,7 @@ import {
 import type { Benefit } from "@/lib/types";
 
 export function Dashboard() {
-  const { data, db, refresh, notice, offline } = useApp(),
+  const { data, refresh, notice, offline } = useApp(),
     [issuer, setIssuer] = useState("all"),
     [cardFilter, setCardFilter] = useState("all"),
     [cadence, setCadence] = useState("all"),
@@ -84,13 +85,14 @@ export function Dashboard() {
   );
   async function setup() {
     setBusy(true);
-    const { error } = await db.rpc("initialize_cards");
-    if (error) setError(error.message);
-    else {
+    try {
+      await run("initializeCards", {});
       await refresh();
       notice(
         "Your cards are added. Confirm their current identities before adding benefits.",
       );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not add cards.");
     }
     setBusy(false);
   }
@@ -347,7 +349,7 @@ export function CardsScreen() {
 }
 
 export function CardScreen({ id }: { id: string }) {
-  const { data, db, refresh, notice, offline } = useApp(),
+  const { data, refresh, notice, offline } = useApp(),
     [modal, setModal] = useState<"card" | "benefit" | null>(null),
     [previous, setPrevious] = useState<Benefit | undefined>(),
     [error, setError] = useState(""),
@@ -376,27 +378,26 @@ export function CardScreen({ id }: { id: string }) {
     setBusy(true);
     setError("");
     const f = new FormData(e.currentTarget);
-    const { error } = await db.rpc("ensure_period", {
-      p_benefit_id: String(f.get("benefit")),
-      p_on: String(f.get("day")),
-    });
-    if (error) setError(error.message);
-    else {
+    try {
+      await run("ensurePeriod", {
+        benefit_id: String(f.get("benefit")),
+        on: String(f.get("day")),
+      });
       await refresh();
       notice("Period preserved. Open History to see earlier periods.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save.");
     }
     setBusy(false);
   }
   async function pause(b: Benefit) {
     setBusy(true);
-    const { error } = await db
-      .from("benefits")
-      .update({ enabled: !b.enabled })
-      .eq("id", b.id);
-    if (error) setError(error.message);
-    else {
+    try {
+      await run("setBenefitEnabled", { id: b.id, enabled: !b.enabled });
       await refresh();
       notice(b.enabled ? "Rule paused; history retained." : "Rule enabled.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save.");
     }
     setBusy(false);
   }
@@ -806,13 +807,15 @@ export function HistoryScreen() {
 }
 
 export function SettingsScreen() {
-  const { db, data, notice } = useApp(),
+  const { data, signOut } = useApp(),
     [coverage, setCoverage] = useState(false),
     [error, setError] = useState("");
   async function signout() {
-    const { error } = await db.auth.signOut();
-    if (error) setError(error.message);
-    else notice("Signed out.");
+    try {
+      await signOut();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not sign out.");
+    }
   }
   return (
     <>
@@ -828,9 +831,9 @@ export function SettingsScreen() {
           </span>
           <h2>Your data, your call.</h2>
           <p>
-            Perkkeep reads your private Supabase ledger. Bank transactions are
-            not fetched by this app. ChatGPT Finances access and scheduled
-            reconciliation have not been verified.
+            Perkkeep reads your private ledger on the server, under your
+            verified sign-in. Bank transactions are not fetched yet, and
+            scheduled reconciliation has not been verified.
           </p>
           <span className="badge needs_review">Manual reconciliation</span>
           <button

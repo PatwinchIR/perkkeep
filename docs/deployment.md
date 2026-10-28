@@ -1,26 +1,34 @@
 # Hosted release runbook
 
-## Current status — October 28, 2026
+## Status, October 28, 2026
 
-The local application works with an isolated Supabase backend. Dedicated hosted Supabase creation was blocked by the free-project limit. The chosen hosted destination is now Neon attached to Vercel. A dedicated Vercel Hobby project and Neon Free database with managed Auth have been provisioned. The application migration and hosted deployment are still pending.
+The Neon port is complete in code and verified against local PostgreSQL. It has not been deployed yet. See the [Phase 0 report](reports/phase-0.md).
 
-No paid upgrade or alteration of unrelated projects is authorized. Database connection strings, Auth secrets and deployment configuration stay in ignored local files or server environment variables. Never copy them into public source or `NEXT_PUBLIC_` variables.
+No paid upgrade or change to unrelated projects is authorized. Database connection strings, auth secrets and encryption keys stay in ignored local files or server environment variables. Never copy them into public source or into `NEXT_PUBLIC_` variables.
 
-## Remaining release work
+## Environment variables (Vercel, production)
 
-1. Adapt the existing migrations and ownership policies to Neon managed Auth, retaining append-only evidence, audit history, atomic reconciliation and idempotent retries.
-2. Implement server-side database access under a restricted database role. Verify the signed-in identity before setting transaction-local owner context. The database owner connection bypasses RLS and must not serve unchecked client queries.
-3. Configure production sign-in, allowed origins and owner access. Test email delivery, login, logout and session revocation.
-4. Update the current Supabase-only deployment guard and backend selection. Browser code must contain no database connection string or privileged key.
-5. Test a hosted preview: owner isolation, unauthorized writes, evidence read-back, replay deduplication, preserved historical periods and audit history.
-6. Release the tested deployment. On a physical iPhone, use Safari → Share → Add to Home Screen and check login, navigation, evidence entry, refresh, offline reconnect and logout.
+| Name                                     | Purpose                                                         |
+| ---------------------------------------- | --------------------------------------------------------------- |
+| `PERKKEEP_DATABASE_URL`                  | Pooled connection as `perkkeep_app`. Never the owner role.      |
+| `NEON_AUTH_BASE_URL`                     | Neon Auth URL, from the Neon Console Auth page.                 |
+| `NEON_AUTH_COOKIE_SECRET`                | At least 32 characters; signs the session cache cookie.         |
+| `PERKKEEP_OWNER_EMAILS`                  | Comma-separated owner emails. Empty admits nobody.              |
+| `PERKKEEP_ALLOWED_ORIGINS`               | Optional extra origins, such as a custom domain.                |
+| `PERKKEEP_ENCRYPTION_KEY`, `CRON_SECRET` | Reserved for Phase 1 (encrypted aggregator tokens, daily sync). |
 
-Local accounts and records are not automatically migrated. Never change an existing user's email-verification state to bypass sign-in. Use clearly labeled, separate test accounts for verification.
+The Neon integration's own `DATABASE_URL` and `DATABASE_URL_UNPOOLED` are the owner role. The app does not use them at runtime, and the build guard refuses a `PERKKEEP_DATABASE_URL` that equals either one.
 
-## Public source and operations
+## Release steps
 
-The public repository starts with a sanitized source snapshot. Earlier local history remains local because it contained personal card endings. Starter cards have no last-four digits; existing private ledger records are preserved. Environment files, local database state, browser traces and generated agent tooling are ignored.
+1. `npm run neon:provision -- --vercel --owner-email <owner email>` on the owner's machine (reads `.local/neon.production.env` by variable name).
+2. Set `NEON_AUTH_BASE_URL` in Vercel if it is not already present. Turn on email verification in Neon Auth.
+3. Deploy (merge to `main`, or run `vercel deploy --prod`).
+4. Sign up with the owner email, verify it, and confirm the ledger opens. Sign out, and confirm a second browser cannot open it.
+5. On a physical iPhone, use Safari, Share, Add to Home Screen, and check sign-in, navigation, evidence entry, refresh, offline reconnect and sign-out.
 
-Source control is not a database backup. Confirm backup and restore procedures within the chosen free plan before relying on the hosted database. Do not enable paid backup options without authorization.
+Never change an existing user's email-verification state to bypass sign-in. Use clearly labeled, separate test accounts for verification.
 
-No Cron jobs, Finances feed or unattended reconciliation have been configured. See [reconciliation](reconciliation.md) for the actual integration limitations and manual fallback.
+## Backups
+
+Source control is not a database backup. Confirm the backup and restore options within the Neon Free plan before relying on the hosted database. Do not turn on paid backup options without authorization.

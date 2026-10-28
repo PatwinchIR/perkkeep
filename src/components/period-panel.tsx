@@ -12,6 +12,7 @@ import {
   dateLabel,
 } from "@/lib/domain";
 import { useApp } from "./provider";
+import { run } from "@/lib/api";
 import { Badge } from "./ui";
 import { EvidenceForm, RejectForm, NoteForm } from "./forms";
 export function PeriodPanel({
@@ -21,7 +22,7 @@ export function PeriodPanel({
   period: Period;
   initialOpen?: boolean;
 }) {
-  const { data, db, refresh, notice, offline } = useApp(),
+  const { data, refresh, notice, offline } = useApp(),
     [open, setOpen] = useState(initialOpen),
     [modal, setModal] = useState<"evidence" | "note" | "reject" | null>(null),
     [selected, setSelected] = useState<Evidence | undefined>(),
@@ -40,14 +41,12 @@ export function PeriodPanel({
   async function enroll() {
     setBusy(true);
     setError("");
-    const { error } = await db
-      .from("benefits")
-      .update({ enrollment_status: "active" })
-      .eq("id", period.benefit_id);
-    if (error) setError(error.message);
-    else {
+    try {
+      await run("markEnrolled", { id: period.benefit_id });
       await refresh();
       notice("Enrollment marked active based on your confirmation.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save.");
     }
     setBusy(false);
   }

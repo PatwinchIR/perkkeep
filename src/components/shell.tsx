@@ -71,11 +71,11 @@ export function Shell({ children }: { children: ReactNode }) {
         </div>
         <div className="account">
           <span className="avatar">
-            {session.user.email?.slice(0, 1).toUpperCase()}
+            {session.email.slice(0, 1).toUpperCase()}
           </span>
           <div>
             <strong>Personal workspace</strong>
-            <span>{session.user.email}</span>
+            <span>{session.email}</span>
           </div>
         </div>
       </aside>

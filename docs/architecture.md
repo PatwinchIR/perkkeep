@@ -4,7 +4,9 @@ Reviewed 2026-10-27. Source: the user's credit-card benefits implementation spec
 
 ## Boundaries
 
-Next.js App Router / TypeScript / Tailwind PWA → Supabase JS → Supabase Auth + Postgres RLS. Ordinary data operations go directly to Supabase. No Plaid, banking connector, custom MCP server, Finances API impersonation, background financial fetch, or service-role key in the app.
+Updated 2026-10-28 for the Neon port: Next.js App Router / TypeScript / Tailwind PWA → fixed server operations (`/api/ledger`) → server-side Neon Auth session check, verified email and owner allowlist → PostgreSQL transaction as the restricted `perkkeep_app` role with a transaction-local `app.owner_id` → row-level security. The browser holds no database credentials. The migrations in `db/migrations/` port the original Supabase migrations; the earlier Supabase description below is kept for history.
+
+Original (Supabase) design: Next.js App Router / TypeScript / Tailwind PWA → Supabase JS → Supabase Auth + Postgres RLS.
 
 The existing projects `comment-section`, `comment-section-dev`, and `hanabi` are excluded. Only their names were read during discovery. No hosted resource is created or changed. A dedicated **local** Supabase native stack is used for the database spike and integration tests. The user's local-verification instruction takes precedence over the generic Vercel bootstrap skill's cloud-link-first workflow.
 
