@@ -59,11 +59,29 @@ export function SourcesPanel() {
     <section className="sources" aria-labelledby="sources-title">
       <div className="section-heading">
         <h2 id="sources-title">Connected accounts</h2>
+        <button
+          className="secondary"
+          disabled={
+            !!busy ||
+            offline ||
+            !data.accounts.some((a) => a.mapping_status === "confirmed")
+          }
+          onClick={() =>
+            void act(
+              "match",
+              () => runSource("runMatchers", {}),
+              "Matching finished. New matches are waiting in Review.",
+            )
+          }
+        >
+          {busy === "match" ? "Matching…" : "Match transactions now"}
+        </button>
       </div>
       <p className="hint">
-        Transactions are evidence for review. They never change a benefit
-        balance by themselves, and accounts that are not linked to a confirmed
-        card are never used for balances.
+        PerkKeep matches transactions on linked accounts to your benefits after
+        every sync. Matches wait in Review until you confirm them, except issuer
+        credits whose description has been verified. Accounts that are not
+        linked to a card are never used.
       </p>
       {error && (
         <p role="alert" className="form-error">

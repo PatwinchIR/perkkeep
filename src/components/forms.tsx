@@ -213,6 +213,14 @@ export function BenefitForm({
           conditions: text(f, "description"),
           source_observed_at: selected?.checkedAt ?? localDate(),
           effective_date_confirmed_by: "user",
+          // Links this benefit to the reviewed rule file (data/benefits) and the version used.
+          ...(selected
+            ? {
+                catalog_rule_id: selected.id,
+                catalog_rule_version: selected.checkedAt,
+                terms_verified: selected.verified,
+              }
+            : {}),
         },
         issuer_source_url: source.href,
         verified_at: new Date().toISOString(),
@@ -278,7 +286,12 @@ export function BenefitForm({
           </select>
           {selected && (
             <small>
-              Source checked {selected.checkedAt}.{" "}
+              {selected.verified
+                ? `Read on the issuer's page on ${selected.checkedAt}.`
+                : "Terms not verified with the issuer."}{" "}
+              {selected.effectiveTo
+                ? `Ends before ${selected.effectiveTo}. `
+                : ""}
               <a href={selected.source} target="_blank" rel="noreferrer">
                 Review issuer terms ↗
               </a>

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { withOwner } from "../db";
 import { encryptSecret, reference, sha256 } from "../crypto";
 import { InputError } from "../ledger";
+import { runMatchers, runMatchersSafely } from "../matchers";
 import { claimSetupToken, setupTokenClaimUrl } from "./simplefin";
 import { parseStatement } from "./csv";
 import {
@@ -36,6 +37,7 @@ export const sourceOperations = {
       .optional(),
   }),
   confirmMapping: z.object({ account_id: z.uuid(), card_id: z.uuid() }),
+  runMatchers: z.object({}),
   rejectMapping: z.object({ account_id: z.uuid() }),
 } as const;
 export type SourceOperation = keyof typeof sourceOperations;
@@ -186,7 +188,9 @@ export async function runSourceOperation(
             statement.coverageStart,
             statement.coverageEnd,
           ]);
+        const matched = await runMatchersSafely(tx, "manual");
         return {
+          matched,
           import: created.rows[0],
           added: result.rows[0].added,
           unchanged: result.rows[0].unchanged,
@@ -199,6 +203,8 @@ export async function runSourceOperation(
         };
       });
     }
+    case "runMatchers":
+      return withOwner(ownerId, (tx) => runMatchers(tx, "manual"));
     case "confirmMapping": {
       const i = parsed.data as SourceOperationInput<"confirmMapping">;
       return withOwner(ownerId, async (tx) => {
@@ -208,6 +214,7 @@ export async function runSourceOperation(
           [i.account_id, i.card_id],
         );
         if (!rows[0]) throw new InputError("Account not found.");
+        await runMatchersSafely(tx, "manual");
         return rows[0];
       });
     }

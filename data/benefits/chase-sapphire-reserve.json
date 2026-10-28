@@ -1,0 +1,168 @@
+{
+  "product": "Chase Sapphire Reserve",
+  "catalog_key": "chase-sapphire-reserve",
+  "issuer": "Chase",
+  "researched": true,
+  "rules": [
+    {
+      "id": "csr/travel-credit",
+      "version": "2026-10-28",
+      "name": "Annual travel credit",
+      "period": "cardmember_year",
+      "amount_cents": 30000,
+      "enrollment_required": false,
+      "eligibility_notes": "Up to $300 each account anniversary year for travel purchases, applied automatically. Qualifying purchases earn no points. Confirm your anniversary date in Chase before relying on the period.",
+      "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+      "checked_on": "2026-10-28",
+      "effective_from": null,
+      "effective_to": null,
+      "verified": true,
+      "manual": false,
+      "matching": {
+        "credit_patterns": ["travel credit"],
+        "purchase_patterns": [],
+        "patterns_verified": false
+      }
+    },
+    {
+      "id": "csr/the-edit-credit",
+      "version": "2026-10-28",
+      "name": "The Edit hotel credit",
+      "period": "calendar_year",
+      "amount_cents": 50000,
+      "enrollment_required": false,
+      "eligibility_notes": "Up to $250 per booking and up to $500 each calendar year for prepaid stays of two or more nights booked through Chase Travel in The Edit. The page says \"Starting 1/1/2026\".",
+      "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+      "checked_on": "2026-10-28",
+      "effective_from": "2026-01-01",
+      "effective_to": null,
+      "verified": true,
+      "manual": false,
+      "matching": {
+        "credit_patterns": ["the edit", "edit credit"],
+        "purchase_patterns": [],
+        "patterns_verified": false
+      }
+    },
+    {
+      "id": "csr/dining-credit",
+      "version": "2026-10-28",
+      "name": "Exclusive Tables dining credit",
+      "period": "semiannual",
+      "amount_cents": 15000,
+      "enrollment_required": false,
+      "eligibility_notes": "Up to $150 from January through June and up to $150 from July through December at restaurants in the OpenTable Exclusive Tables program. Delivery and gift cards do not qualify. The program runs through 06/30/2030.",
+      "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+      "checked_on": "2026-10-28",
+      "effective_from": null,
+      "effective_to": "2030-07-01",
+      "verified": true,
+      "manual": false,
+      "matching": {
+        "credit_patterns": ["dining credit", "exclusive tables"],
+        "purchase_patterns": [],
+        "patterns_verified": false
+      }
+    },
+    {
+      "id": "csr/stubhub-credit",
+      "version": "2026-10-28",
+      "name": "StubHub credit",
+      "period": "semiannual",
+      "amount_cents": 15000,
+      "enrollment_required": true,
+      "eligibility_notes": "Up to $150 from January through June and up to $150 from July through December at StubHub or viagogo. Activation required. Gift cards excluded. Available through 12/31/2027.",
+      "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+      "checked_on": "2026-10-28",
+      "effective_from": null,
+      "effective_to": "2028-01-01",
+      "verified": true,
+      "manual": false,
+      "matching": {
+        "credit_patterns": ["stubhub"],
+        "purchase_patterns": ["stubhub", "viagogo"],
+        "patterns_verified": false
+      }
+    },
+    {
+      "id": "csr/peloton-credit",
+      "version": "2026-10-28",
+      "name": "Peloton membership credit",
+      "period": "monthly",
+      "amount_cents": 1000,
+      "enrollment_required": true,
+      "eligibility_notes": "$10 each month (up to $120 a calendar year) for eligible Peloton memberships. Activation required; app-store purchases do not qualify. Available through 12/31/2027.",
+      "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+      "checked_on": "2026-10-28",
+      "effective_from": null,
+      "effective_to": "2028-01-01",
+      "verified": true,
+      "manual": false,
+      "matching": {
+        "credit_patterns": ["peloton"],
+        "purchase_patterns": ["peloton"],
+        "patterns_verified": false
+      }
+    },
+    {
+      "id": "csr/lyft-credit",
+      "version": "2026-10-28",
+      "name": "Lyft ride credit",
+      "period": "monthly",
+      "amount_cents": 1000,
+      "enrollment_required": true,
+      "eligibility_notes": "$10 in Lyft in-app credit each month for rides after adding the card in the Lyft app. Unused credit is forfeited. Available through 9/30/2027. The credit is applied in Lyft, so a card statement may not show its use.",
+      "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+      "checked_on": "2026-10-28",
+      "effective_from": null,
+      "effective_to": "2027-10-01",
+      "verified": true,
+      "manual": true,
+      "matching": {
+        "credit_patterns": [],
+        "purchase_patterns": [],
+        "patterns_verified": false
+      }
+    },
+    {
+      "id": "csr/doordash-promos",
+      "version": "2026-10-28",
+      "name": "DoorDash promos",
+      "period": "monthly",
+      "amount_cents": 3500,
+      "enrollment_required": true,
+      "eligibility_notes": "Up to $35 each month in DoorDash promotions ($15 plus two $10) with DashPass activated using this card. Promotions apply at checkout in DoorDash, not as statement credits. Available through 12/31/2029.",
+      "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+      "checked_on": "2026-10-28",
+      "effective_from": null,
+      "effective_to": "2030-01-01",
+      "verified": true,
+      "manual": true,
+      "matching": {
+        "credit_patterns": [],
+        "purchase_patterns": [],
+        "patterns_verified": false
+      }
+    },
+    {
+      "id": "csr/global-entry",
+      "version": "2026-10-28",
+      "name": "Global Entry, TSA PreCheck or NEXUS credit",
+      "period": "custom",
+      "amount_cents": 12000,
+      "enrollment_required": false,
+      "eligibility_notes": "Up to $120 every four years for the application fee, paid directly to the program or an eligible provider. Enter the four-year window yourself.",
+      "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+      "checked_on": "2026-10-28",
+      "effective_from": null,
+      "effective_to": null,
+      "verified": true,
+      "manual": false,
+      "matching": {
+        "credit_patterns": ["global entry", "tsa precheck", "nexus"],
+        "purchase_patterns": [],
+        "patterns_verified": false
+      }
+    }
+  ]
+}

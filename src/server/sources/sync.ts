@@ -1,5 +1,6 @@
 import "server-only";
 import { withOwner, type Tx } from "../db";
+import { runMatchersSafely } from "../matchers";
 import { decryptSecret, encryptSecret, reference } from "../crypto";
 import { localDate, shiftDays } from "@/lib/domain";
 import { simplefinAdapter } from "./simplefin";
@@ -275,6 +276,10 @@ export async function syncConnection(
         JSON.stringify(batch.messages),
       ],
     );
-    return { status, ...stored, messages: batch.messages };
+    const matched = await runMatchersSafely(
+      tx,
+      trigger === "scheduled" ? "scheduled" : "manual",
+    );
+    return { status, ...stored, messages: batch.messages, matched };
   });
 }

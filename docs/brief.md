@@ -74,7 +74,7 @@ As built (see [architecture](architecture.md)): Next.js 16 App Router PWA → fi
 
 Separate card identity, benefit rules, benefit periods and redemption evidence. Support monthly, quarterly, semiannual, calendar-year, cardmember-year, one-time and custom periods with issuer timezones and confirmed anniversaries. Preserve old periods; version rules instead of rewriting them. Integer cents; units modeled separately. Track enrollment, eligibility, confidence and coverage; show unknown or stale information explicitly, and never display "no evidence of use" as "unused". Every balance change has an audit trail; corrections are appended and linked. Never count both a candidate and its confirmed replacement. Refunds do not restore a benefit without verified entitlement reversal. `record_evidence` and `apply_reconciliation` remain the reference behaviors (append-only, idempotent, transactional, reused keys with changed content rejected).
 
-## 7. Benefits knowledge layer (Phase 2, not started)
+## 7. Benefits knowledge layer (Phase 2, in progress)
 
 Benefit rules and earn rates go in reviewable data files (for example `data/benefits/*.json`) with issuer, product, benefit name, period type, amount or units, enrollment requirement, eligibility notes, source URL, effective date and optional end date. No personal identifiers, no speculative valuations; unverified terms carry `verified: false` and the UI says so. Rule changes are versioned and each balance shows the rule version behind it. Cards in scope: American Express Gold, Chase Sapphire Reserve, Chase Freedom Flex, Chase Freedom Unlimited, Prime Visa, Discover it, Chase Ink Business Cash, Chase Ink Business Preferred. Owning a card does not establish entitlement to a benefit version.
 

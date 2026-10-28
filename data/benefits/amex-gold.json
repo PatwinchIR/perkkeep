@@ -1,0 +1,95 @@
+{
+  "product": "American Express Gold",
+  "catalog_key": "amex-gold",
+  "issuer": "American Express",
+  "researched": true,
+  "rules": [
+    {
+      "id": "amex-gold/dining-credit",
+      "version": "2026-10-28",
+      "name": "Dining credit",
+      "period": "monthly",
+      "amount_cents": 1000,
+      "enrollment_required": true,
+      "eligibility_notes": "Up to $10 in statement credits each month when paying with the Gold Card at Grubhub (including Seamless), Buffalo Wild Wings, Five Guys, The Cheesecake Factory and Wonder.",
+      "source_url": "https://www.americanexpress.com/en-us/account/get-started/gold/explore-benefits",
+      "checked_on": "2026-10-28",
+      "effective_from": null,
+      "effective_to": null,
+      "verified": true,
+      "manual": false,
+      "matching": {
+        "credit_patterns": ["dining credit", "grubhub credit"],
+        "purchase_patterns": [
+          "grubhub",
+          "seamless",
+          "buffalo wild wings",
+          "five guys",
+          "cheesecake factory",
+          "wonder"
+        ],
+        "patterns_verified": false
+      }
+    },
+    {
+      "id": "amex-gold/resy-credit",
+      "version": "2026-10-28",
+      "name": "Resy credit",
+      "period": "semiannual",
+      "amount_cents": 5000,
+      "enrollment_required": true,
+      "eligibility_notes": "Up to $50 from January through June and up to $50 from July through December for eligible purchases at qualifying U.S. Resy restaurants. Enrollment through the card account.",
+      "source_url": "https://www.americanexpress.com/en-us/account/get-started/gold/explore-benefits",
+      "checked_on": "2026-10-28",
+      "effective_from": null,
+      "effective_to": null,
+      "verified": true,
+      "manual": false,
+      "matching": {
+        "credit_patterns": ["resy"],
+        "purchase_patterns": [],
+        "patterns_verified": false
+      }
+    },
+    {
+      "id": "amex-gold/dunkin-credit",
+      "version": "2026-10-28",
+      "name": "Dunkin' credit",
+      "period": "monthly",
+      "amount_cents": 700,
+      "enrollment_required": true,
+      "eligibility_notes": "Up to $7 in statement credits each month at U.S. Dunkin' locations when paying with the Gold Card.",
+      "source_url": "https://www.americanexpress.com/en-us/account/get-started/gold/explore-benefits",
+      "checked_on": "2026-10-28",
+      "effective_from": null,
+      "effective_to": null,
+      "verified": true,
+      "manual": false,
+      "matching": {
+        "credit_patterns": ["dunkin"],
+        "purchase_patterns": ["dunkin"],
+        "patterns_verified": false
+      }
+    },
+    {
+      "id": "amex-gold/uber-cash",
+      "version": "2026-10-28",
+      "name": "Uber Cash",
+      "period": "monthly",
+      "amount_cents": 1000,
+      "enrollment_required": true,
+      "eligibility_notes": "$10 in Uber Cash each month after adding the Gold Card to the Uber account; usable on U.S. rides and orders with an Amex card selected. Uber Cash is spent in Uber, so a card statement cannot show its use.",
+      "source_url": "https://www.americanexpress.com/en-us/account/get-started/gold/explore-benefits",
+      "checked_on": "2026-10-28",
+      "effective_from": null,
+      "effective_to": null,
+      "verified": true,
+      "manual": true,
+      "matching": {
+        "credit_patterns": [],
+        "purchase_patterns": [],
+        "patterns_verified": false
+      }
+    }
+  ]
+}
