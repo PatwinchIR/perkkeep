@@ -20,6 +20,7 @@
     "neon:inspect": "node scripts/neon-inspect.mjs",
     "owner:cards": "node scripts/owner-cards.mjs",
     "neon:https": "node scripts/neon-https.mjs",
+    "neon:migrate": "node scripts/neon-migrate.mjs",
     "neon:reconcile": "tsx --conditions react-server scripts/neon-reconcile.ts"
   },
   "keywords": [],
