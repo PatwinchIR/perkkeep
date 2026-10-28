@@ -2,14 +2,18 @@ import { decimalToCents } from "./types";
 
 // CSV formats are detected from the exact header row. The issuer layouts below come from the
 // architect's and agent's memory of common exports and are marked unverified until a real file of
-// each kind has been imported. Copilot Money is not supported until a sample export is provided.
+// each kind has been imported. The Copilot Money layout was read from the owner's real export on
+// 2026-10-28 (D53); it holds every account in one file, so each row names its account.
+export type CsvAccount = { name: string; mask: string | null };
 export type CsvRow = {
   transactedOn: string;
   postedOn: string | null;
   amountCents: number;
   description: string;
+  // Set only by multi-account layouts.
+  account?: CsvAccount;
 };
-type Format = {
+export type Format = {
   id: string;
   label: string;
   verified: boolean;
@@ -20,8 +24,45 @@ type Format = {
   amount: string;
   // Multiply the file's amount by this to get PerkKeep's sign (negative = money out).
   sign: 1 | -1;
+  // Multi-account exports: the columns naming each row's account, and which rows are statement
+  // activity at all (the rest are dropped before anything is hashed or stored).
+  account?: { name: string; mask: string };
+  include?: (row: Record<string, string>) => boolean;
 };
+export const COPILOT_FORMAT_ID = "copilot-money";
 export const CSV_FORMATS: Format[] = [
+  {
+    id: COPILOT_FORMAT_ID,
+    label: "Copilot Money export (every account in one file)",
+    verified: true,
+    headers: [
+      "date",
+      "name",
+      "amount",
+      "status",
+      "category",
+      "parent category",
+      "excluded",
+      "tags",
+      "type",
+      "account",
+      "account mask",
+      "note",
+      "recurring",
+    ],
+    date: "date",
+    description: "name",
+    amount: "amount",
+    // Copilot stores spending as positive and credits or refunds as negative.
+    sign: -1,
+    account: { name: "account", mask: "account mask" },
+    // Payments between the owner's own accounts are not purchases or credits, a pending row is
+    // not final, and rows whose account Copilot no longer names cannot be placed.
+    include: (r) =>
+      r.type !== "internal transfer" &&
+      r.status !== "pending" &&
+      r.account.trim() !== "",
+  },
   {
     id: "chase-card",
     label: "Chase credit card activity",
@@ -121,6 +162,9 @@ function isoDate(value: string): string {
 }
 const money = (value: string) =>
   decimalToCents(value.replace(/[$,\s]/g, "").replace(/^\((.*)\)$/, "-$1"));
+// Only exactly four digits identify an account; anything else is treated as no digits.
+const lastFour = (value: string | undefined) =>
+  /^\d{4}$/.test((value ?? "").trim()) ? (value ?? "").trim() : null;
 
 export function detectFormat(header: string[], requested?: string): Format {
   const normalized = header.map((h) => h.trim().toLowerCase());
@@ -157,9 +201,15 @@ export function parseStatement(text: string, requested?: string) {
     description: col(format.description),
     amount: col(format.amount),
   };
-  const rows: CsvRow[] = body.map((cells, i) => {
+  const names = header.map((h) => h.trim().toLowerCase());
+  const rows: CsvRow[] = [];
+  body.forEach((cells, i) => {
+    const record = Object.fromEntries(
+      names.map((name, j) => [name, cells[j] ?? ""]),
+    );
+    if (format.include && !format.include(record)) return;
     try {
-      return {
+      rows.push({
         transactedOn: isoDate(cells[at.date] ?? ""),
         postedOn:
           at.posted >= 0 && cells[at.posted]?.trim()
@@ -167,7 +217,15 @@ export function parseStatement(text: string, requested?: string) {
             : null,
         amountCents: format.sign * money(cells[at.amount] ?? ""),
         description: (cells[at.description] ?? "").trim().slice(0, 500),
-      };
+        ...(format.account
+          ? {
+              account: {
+                name: record[format.account.name].trim().slice(0, 200),
+                mask: lastFour(record[format.account.mask]),
+              },
+            }
+          : {}),
+      });
     } catch (e) {
       throw new Error(
         `Row ${i + 2}: ${e instanceof Error ? e.message : "unreadable"}`,
