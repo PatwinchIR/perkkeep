@@ -27,6 +27,10 @@ if (process.env.VERCEL) {
     problems.push("NEON_AUTH_COOKIE_SECRET must have at least 32 characters");
   if (!process.env.PERKKEEP_OWNER_EMAILS?.trim())
     problems.push("PERKKEEP_OWNER_EMAILS is empty, so nobody could sign in");
+  if (Buffer.from(process.env.PERKKEEP_ENCRYPTION_KEY ?? "", "base64").length !== 32)
+    problems.push("PERKKEEP_ENCRYPTION_KEY must be 32 base64-encoded bytes");
+  if ((process.env.CRON_SECRET ?? "").length < 32)
+    problems.push("CRON_SECRET must have at least 32 characters");
   if ((process.env.PERKKEEP_AUTH_PROVIDER ?? "neon") !== "neon")
     problems.push("PERKKEEP_AUTH_PROVIDER must be neon on Vercel");
   for (const [name, value] of Object.entries(process.env))

@@ -99,6 +99,20 @@ export async function resolveOwner(
   }
 }
 
+// Lists connections for the daily job through a definer function that returns ids only.
+export async function connectionsDue() {
+  const client = await connect();
+  try {
+    const { rows } = await client.query<{
+      owner_id: string;
+      connection_id: string;
+    }>("select owner_id, connection_id from app.connections_due()");
+    return rows;
+  } finally {
+    client.release();
+  }
+}
+
 export async function closePool() {
   await pool?.end();
   pool = null;

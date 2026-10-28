@@ -317,7 +317,31 @@ export async function loadSnapshot(tx: Tx): Promise<Snapshot> {
   const audit = await tx.query(
     "select * from public.audit_events order by occurred_at desc, id desc limit 1000",
   );
+  const accounts = await tx.query(
+    `select a.id, a.source, a.connection_id, a.institution, a.name, a.mask, a.kind, a.currency, a.proposed_card_id,
+       a.card_id, a.mapping_status, a.mapping_confirmed_at, a.created_at,
+       c.earliest_synced_on, c.synced_through, c.last_attempted_at, c.last_success_at, c.last_error,
+       (select count(*) from public.transactions t where t.account_id=a.id)::int as transaction_rows,
+       (select b.balance_cents from public.balance_snapshots b where b.account_id=a.id order by b.observed_at desc limit 1) as balance_cents,
+       (select b.observed_at from public.balance_snapshots b where b.account_id=a.id order by b.observed_at desc limit 1) as balance_observed_at
+     from public.accounts a left join public.account_coverage c on c.account_id=a.id
+     order by a.institution, a.name, a.id`,
+  );
+  // Connection secrets never leave the server.
+  const connections = await tx.query(
+    "select id, source, label, status, last_attempted_at, last_success_at, last_error, created_at from public.source_connections order by created_at",
+  );
+  const syncs = await tx.query(
+    "select * from public.source_syncs order by started_at desc limit 50",
+  );
+  const imports = await tx.query(
+    "select id, account_id, format, file_name, row_count, coverage_start, coverage_end, created_at from public.imports order by created_at desc limit 50",
+  );
   return {
+    accounts: accounts.rows,
+    connections: connections.rows,
+    syncs: syncs.rows,
+    imports: imports.rows,
     cards,
     benefits,
     periods: periods.rows as Period[],

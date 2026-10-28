@@ -19,6 +19,7 @@ import { run } from "@/lib/api";
 import { CardTile, Empty, PageHeading } from "./ui";
 import { PeriodPanel } from "./period-panel";
 import { BenefitForm, CardForm, CoverageForm } from "./forms";
+import { SourcesPanel } from "./sources";
 import {
   activePeriod,
   cardEnding,
@@ -832,8 +833,8 @@ export function SettingsScreen() {
           <h2>Your data, your call.</h2>
           <p>
             Perkkeep reads your private ledger on the server, under your
-            verified sign-in. Bank transactions are not fetched yet, and
-            scheduled reconciliation has not been verified.
+            verified sign-in. Connected accounts sync once a day; transactions
+            are evidence for review and never change a balance on their own.
           </p>
           <span className="badge needs_review">Manual reconciliation</span>
           <button
@@ -864,6 +865,7 @@ export function SettingsScreen() {
           </p>
         </section>
       </div>
+      <SourcesPanel />
       <div className="section-heading">
         <h2>Reconciliation log</h2>
       </div>

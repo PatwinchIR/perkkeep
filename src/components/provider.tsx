@@ -37,6 +37,10 @@ export function useApp() {
   return value;
 }
 const EMPTY: Snapshot = {
+  accounts: [],
+  connections: [],
+  syncs: [],
+  imports: [],
   cards: [],
   benefits: [],
   periods: [],

@@ -850,17 +850,17 @@ small {
 }
 .badge.candidate {
   background: #f3ead6;
-  color: #936d32;
+  color: #74541f;
 }
 .badge.needs_review,
 .badge.unknown {
   background: #efe9df;
-  color: #88734c;
+  color: #6b5631;
 }
 .badge.expired,
 .badge.rejected {
   background: #eeede9;
-  color: #777c72;
+  color: #5c6157;
 }
 .period-amounts {
   display: grid;
@@ -1993,4 +1993,62 @@ dialog::backdrop {
 .welcome-foot,
 .welcome-copy p {
   color: #596650;
+}
+.sources {
+  margin-top: 34px;
+}
+.sources > .hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin: -6px 0 18px;
+}
+.sources .sync-log,
+.account-list {
+  margin-top: 20px;
+}
+.account-list {
+  display: grid;
+  gap: 10px;
+}
+.account-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--white);
+}
+.account-row strong {
+  display: block;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.account-row span,
+.account-row p {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 5px 0 0;
+}
+.account-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  min-width: 180px;
+}
+.sr-label {
+  font-size: 11px;
+  color: var(--muted);
+  display: grid;
+  gap: 4px;
+}
+@media (max-width: 720px) {
+  .account-row {
+    flex-direction: column;
+  }
+  .account-actions {
+    align-items: stretch;
+    min-width: 0;
+  }
 }

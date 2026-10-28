@@ -77,6 +77,7 @@ const env = {
   TEST_OWNER_URL: url("perkkeep_local_owner", ownerPassword, "perkkeep_test"),
   TEST_APP_URL: url("perkkeep_app", appPassword, "perkkeep_test"),
   TEST_AUTH_SECRET: saved.TEST_AUTH_SECRET ?? randomBytes(32).toString("hex"),
+  ENCRYPTION_KEY: saved.ENCRYPTION_KEY ?? randomBytes(32).toString("base64"),
 };
 writeFileSync(file, JSON.stringify(env, null, 2), { mode: 0o600 });
 
@@ -87,7 +88,7 @@ const keep = existsSync(".env.local")
       .filter(
         (l) =>
           l &&
-          !/^(PERKKEEP_DATABASE_URL|PERKKEEP_AUTH_PROVIDER|PERKKEEP_TEST_AUTH_SECRET|PERKKEEP_OWNER_EMAILS)=/.test(
+          !/^(PERKKEEP_DATABASE_URL|PERKKEEP_AUTH_PROVIDER|PERKKEEP_TEST_AUTH_SECRET|PERKKEEP_OWNER_EMAILS|PERKKEEP_ENCRYPTION_KEY)=/.test(
             l,
           ),
       )
@@ -100,6 +101,7 @@ writeFileSync(
     "PERKKEEP_AUTH_PROVIDER=test",
     `PERKKEEP_TEST_AUTH_SECRET=${env.TEST_AUTH_SECRET}`,
     "PERKKEEP_OWNER_EMAILS=owner@perkkeep.test",
+    `PERKKEEP_ENCRYPTION_KEY=${env.ENCRYPTION_KEY}`,
   ].join("\n") + "\n",
   { mode: 0o600 },
 );

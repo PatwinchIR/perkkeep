@@ -1,4 +1,8 @@
 import type { Operation, OperationInput } from "@/server/ledger";
+import type {
+  SourceOperation,
+  SourceOperationInput,
+} from "@/server/sources/operations";
 import type { Snapshot } from "./types";
 
 export type SessionState = {
@@ -49,6 +53,15 @@ export function run<O extends Operation>(
   input: OperationInput<O>,
 ): Promise<unknown> {
   return request("/api/ledger", {
+    method: "POST",
+    body: JSON.stringify({ op, input }),
+  });
+}
+export function runSource<O extends SourceOperation>(
+  op: O,
+  input: Partial<SourceOperationInput<O>>,
+): Promise<unknown> {
+  return request("/api/sources", {
     method: "POST",
     body: JSON.stringify({ op, input }),
   });

@@ -339,3 +339,45 @@ test("shows both Ink cards without invented digits and saves last-four edits", a
   ).toEqual(["0555"]);
   await noOverflow(page);
 });
+
+test("imports a synthetic statement CSV, shows its coverage, and links the account to a card", async ({
+  page,
+}) => {
+  const owner = await user();
+  await owner.q("select public.initialize_cards()");
+  await login(page, owner);
+  await page.goto("/settings");
+  await page.getByLabel("CSV file").setInputFiles({
+    name: "synthetic-statement.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(
+      "Trans. Date,Post Date,Description,Amount,Category\n10/01/2026,10/02/2026,SYNTHETIC STORE,5.00,Shopping\n10/04/2026,10/05/2026,SYNTHETIC CAFE,3.25,Dining\n",
+    ),
+  });
+  await page.getByLabel("Institution").fill("Discover");
+  await page.getByLabel("Account name").fill("Synthetic Discover export");
+  await page.getByRole("button", { name: "Import file" }).click();
+  const row = page
+    .locator(".account-row")
+    .filter({ hasText: "Synthetic Discover export" });
+  await expect(row).toContainText("covers Oct 1, 2026 – Oct 4, 2026");
+  await expect(row).toContainText("2 transaction records");
+  await row
+    .getByLabel("Card for Synthetic Discover export")
+    .selectOption({ label: "Discover it · Last four not set" });
+  await row.getByRole("button", { name: "Link card" }).click();
+  await expect(row).toContainText("Linked to Discover it");
+  const { default: AxeBuilder } = await import("@axe-core/playwright");
+  const audit = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+    .analyze();
+  expect(
+    audit.violations.map((v) => ({
+      id: v.id,
+      nodes: v.nodes.map((n) => n.target),
+    })),
+  ).toEqual([]);
+  await noOverflow(page);
+  const [account] = await owner.q("select mapping_status from public.accounts");
+  expect(account.mapping_status).toBe("confirmed");
+});

@@ -61,6 +61,7 @@ export default defineConfig({
           PERKKEEP_AUTH_PROVIDER: "test",
           PERKKEEP_TEST_AUTH_SECRET: local.TEST_AUTH_SECRET ?? "",
           PERKKEEP_OWNER_EMAILS: "owner@perkkeep.test,owner2@perkkeep.test",
+          PERKKEEP_ENCRYPTION_KEY: local.ENCRYPTION_KEY ?? "",
         },
       },
 });
