@@ -15,7 +15,8 @@ import {
   WalletCards,
 } from "lucide-react";
 import { useApp } from "./provider";
-import { run } from "@/lib/api";
+import { run, runSource } from "@/lib/api";
+import { RULE_FILES } from "@/lib/catalog";
 import { CardTile, Empty, PageHeading } from "./ui";
 import { PeriodPanel } from "./period-panel";
 import { BenefitForm, CardForm, CoverageForm } from "./forms";
@@ -376,6 +377,38 @@ export function CardScreen({ id }: { id: string }) {
           benefits.find((b) => b.id === p.benefit_id),
         ),
     );
+  const researched = RULE_FILES.find(
+      (f) => f.researched && f.catalog_key === card.catalog_key,
+    ),
+    missing = (researched?.rules ?? []).filter(
+      (r) =>
+        !benefits.some(
+          (b) =>
+            (b.eligibility_rules_json as { catalog_rule_id?: string })
+              ?.catalog_rule_id === r.id,
+        ),
+    );
+  async function addResearched() {
+    setBusy(true);
+    setError("");
+    try {
+      const r = (await run("addResearchedBenefits", { card_id: id })) as {
+        added: string[];
+        skipped: string[];
+      };
+      await runSource("runMatchers", {});
+      await refresh();
+      notice(
+        `${r.added.length} researched ${r.added.length === 1 ? "benefit" : "benefits"} added and matched against your transactions.` +
+          (r.skipped.length
+            ? ` Not added (needs your dates or has ended): ${r.skipped.join(", ")}.`
+            : ""),
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not add benefits.");
+    }
+    setBusy(false);
+  }
   async function historical(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
@@ -454,6 +487,28 @@ export function CardScreen({ id }: { id: string }) {
           <Plus size={16} /> Add benefit
         </button>
       </div>
+      {card.identity_verified_at &&
+        card.status === "active" &&
+        missing.length > 0 && (
+          <div className="notice">
+            <strong>
+              {missing.length} researched{" "}
+              {missing.length === 1 ? "benefit" : "benefits"} for this card
+            </strong>
+            <p>
+              Read on {card.issuer}&rsquo;s own pages:{" "}
+              {missing.map((r) => r.name).join(", ")}. Enrollment stays unknown
+              until you confirm it.
+            </p>
+            <button
+              className="secondary"
+              disabled={busy || offline}
+              onClick={() => void addResearched()}
+            >
+              {busy ? "Adding…" : "Add researched benefits"}
+            </button>
+          </div>
+        )}
       {benefits.length === 0 ? (
         <Empty title="A clean start for this card.">
           Add a benefit using current issuer terms. Nothing is assumed from the

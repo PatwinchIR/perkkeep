@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Tx } from "./db";
 import type { Snapshot, Period } from "@/lib/types";
 import { localDate } from "@/lib/domain";
+import { RULE_FILES } from "@/lib/catalog";
 
 const uuid = z.uuid();
 const day = z.iso.date();
@@ -66,6 +67,7 @@ export const operations = {
   markEnrolled: z.object({ id: uuid }),
   ensurePeriod: z.object({ benefit_id: uuid, on: day }),
   initializeCards: z.object({}),
+  addResearchedBenefits: z.object({ card_id: uuid }),
   setPeriodNote: z.object({ id: uuid, notes: text(4000) }),
   recordEvidence: z.object({
     id: uuid.optional(),
@@ -136,6 +138,83 @@ const VERSIONABLE = new Set([
   "enabled",
 ]);
 
+// Adds each researched rule (data/benefits) for a confirmed card that the card does not have yet.
+// The card's confirmed identity and the issuer's verified terms make it eligible; enrollment
+// stays unknown until the owner confirms it, and rules the issuer gives no start date for begin
+// on January 1 of this year, marked as a default for the owner to correct. Rules that need
+// owner-specific dates (custom windows) and rules that have ended are skipped.
+const CATEGORIES: [RegExp, string][] = [
+  [/dining|resy|dunkin|doordash|grubhub/i, "Dining"],
+  [/travel|lyft|uber|global entry|edit/i, "Travel"],
+  [/stubhub|peloton/i, "Lifestyle"],
+];
+export async function addResearchedBenefits(tx: Tx, cardId: string) {
+  const { rows: cards } = await tx.query(
+    "select * from public.cards where id=$1",
+    [cardId],
+  );
+  const card = cards[0];
+  if (!card) throw new InputError("Card not found.");
+  if (!card.identity_verified_at || card.status !== "active")
+    throw new InputError("Confirm the active card before adding benefits.");
+  const file = RULE_FILES.find((f) => f.catalog_key === card.catalog_key);
+  if (!file?.researched)
+    return { added: [] as string[], skipped: [] as string[] };
+  const { rows: existing } = await tx.query(
+    "select eligibility_rules_json->>'catalog_rule_id' as rule from public.benefits where card_id=$1",
+    [cardId],
+  );
+  const today = localDate(new Date(), card.issuer_timezone);
+  const added: string[] = [],
+    skipped: string[] = [];
+  for (const r of file.rules) {
+    if (existing.some((e) => e.rule === r.id)) continue;
+    if (
+      !r.verified ||
+      ["custom", "one_time"].includes(r.period) ||
+      (r.effective_to && r.effective_to <= today)
+    ) {
+      skipped.push(r.name);
+      continue;
+    }
+    const start = r.effective_from ?? `${today.slice(0, 4)}-01-01`;
+    await tx.query(
+      `insert into public.benefits(card_id,name,description,category,cadence,nominal_amount_cents,nominal_units,
+         unit_label,effective_from,effective_to,enrollment_required,enrollment_status,eligibility_status,
+         manual_verification_required,eligibility_rules_json,issuer_source_url,verified_at,enabled)
+       values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'eligible',$13,$14,$15,now(),true)`,
+      [
+        cardId,
+        r.name,
+        r.eligibility_notes,
+        CATEGORIES.find(([re]) => re.test(r.name))?.[1] ?? "Other",
+        r.period,
+        r.amount_cents ?? null,
+        r.units ?? null,
+        r.unit_label ?? null,
+        start,
+        r.effective_to,
+        r.enrollment_required,
+        r.enrollment_required ? "unknown" : "not_required",
+        r.manual,
+        {
+          conditions: r.eligibility_notes,
+          source_observed_at: r.checked_on,
+          effective_date_confirmed_by: r.effective_from
+            ? "issuer"
+            : "default_start_of_year",
+          catalog_rule_id: r.id,
+          catalog_rule_version: r.version,
+          terms_verified: r.verified,
+        },
+        r.source_url,
+      ],
+    );
+    added.push(r.name);
+  }
+  return { added, skipped };
+}
+
 async function one<T>(tx: Tx, sql: string, values: unknown[]): Promise<T> {
   const { rows } = await tx.query(sql, values);
   if (rows.length !== 1)
@@ -172,6 +251,10 @@ export async function runOperation(
           i.issuer_timezone,
         ],
       );
+    }
+    case "addResearchedBenefits": {
+      const i = input as OperationInput<"addResearchedBenefits">;
+      return addResearchedBenefits(tx, i.card_id);
     }
     case "createBenefit": {
       const i = input as OperationInput<"createBenefit">;

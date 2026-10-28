@@ -13,6 +13,6 @@ Each rule records:
 - `matching`: deterministic hints for the transaction matcher.
   - `credit_patterns` match the issuer's statement credit description.
   - `purchase_patterns` match qualifying purchases.
-  - While `patterns_verified` is `false`, matches are only candidates for your review. Set it to `true` once a real statement has shown the pattern is right, and matched credits then count as confirmed issuer credits.
+  - While `patterns_verified` is `false`, matches are only candidates for your review. Set it to `true` once a real statement has shown the pattern is right, and matched credits then count as confirmed issuer credits. Record the date in `patterns_verified_on` and the statement wording in `observed_descriptor` (no amounts or account details).
 
 Products with an empty `rules` list and `researched: false` have not been researched yet. That does not mean they have no benefits.

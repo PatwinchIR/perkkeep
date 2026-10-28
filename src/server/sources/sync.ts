@@ -17,9 +17,11 @@ const TZ = "America/New_York";
 // two weeks to catch pending→posted changes and late credits.
 // SimpleFIN Bridge limits each /accounts request to 90 days and expects at most about 24 requests a
 // day, disabling access tokens that exceed it (https://beta-bridge.simplefin.org/info/developers,
-// read 2026-10-28). Windows are capped at 90 days and manual syncs wait out a cooldown.
+// read 2026-10-28). Its responses also warn above 45 days ("exceeds recommended range of 45
+// days. In the future, this may be capped", seen 2026-10-28), so windows are capped at 45 days
+// and manual syncs wait out a cooldown.
 const OVERLAP_DAYS = 14,
-  MAX_WINDOW_DAYS = 90,
+  MAX_WINDOW_DAYS = 45,
   MANUAL_COOLDOWN_MS = 30 * 60 * 1000;
 export const secretLabel = (connectionId: string) =>
   `source_connection:${connectionId}`;

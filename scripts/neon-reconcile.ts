@@ -3,13 +3,17 @@
 // the owner's identity set. It connects over Neon's WebSocket endpoint on port 443, so it works
 // where port 5432 is blocked. Credentials come from .local/neon.https.env (see neon-https.mjs).
 //
-//   npm run neon:reconcile -- --email you@example.com [--dry-run]
+//   npm run neon:reconcile -- --email you@example.com [--add-researched] [--dry-run]
+//
+// --add-researched adds each confirmed card's researched benefits (data/benefits) first, as the
+// card page's "Add researched benefits" button does.
 import { readFileSync } from "node:fs";
 import { EnvHttpProxyAgent, setGlobalDispatcher, WebSocket } from "undici";
 import { neonConfig, Pool, types } from "@neondatabase/serverless";
 import type { Tx } from "../src/server/db";
 import { linkAccounts } from "../src/server/sources/sync";
 import { runMatchers } from "../src/server/matchers";
+import { addResearchedBenefits } from "../src/server/ledger";
 
 const args = process.argv.slice(2);
 const email = args[args.indexOf("--email") + 1]?.toLowerCase();
@@ -67,6 +71,18 @@ try {
   ]);
   const tx = client as unknown as Tx;
   await linkAccounts(tx);
+  if (args.includes("--add-researched")) {
+    const { rows: cards } = await client.query(
+      "select id, display_name from public.cards where status='active' and identity_verified_at is not null order by display_name",
+    );
+    for (const c of cards) {
+      const r = await addResearchedBenefits(tx, c.id);
+      if (r.added.length || r.skipped.length)
+        console.log(
+          `${c.display_name}: added ${r.added.join(", ") || "none"}; skipped ${r.skipped.join(", ") || "none"}`,
+        );
+    }
+  }
   const matched = await runMatchers(tx, "manual");
   const { rows: accounts } = await client.query(
     `select a.institution, a.name, a.mapping_status, c.display_name as card
