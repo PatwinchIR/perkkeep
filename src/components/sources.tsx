@@ -31,9 +31,9 @@ export function SourcesPanel() {
     setBusy(label);
     setError("");
     try {
-      await fn();
+      const outcome = await fn();
       await refresh();
-      notice(done);
+      notice(typeof outcome === "string" ? outcome : done);
     } catch (e) {
       setError(errorText(e));
     } finally {
@@ -182,11 +182,13 @@ export function SourcesPanel() {
                 const r = (await runSource("importCsv", input)) as {
                   replay: boolean;
                   added?: number;
+                  accounts?: AccountImport[];
                 };
                 if (r.replay)
                   throw new Error(
                     "This file was already imported; nothing changed.",
                   );
+                if (r.accounts) return importSummary(r.accounts);
               },
               "File imported. Its date range is recorded as coverage.",
             )
@@ -252,6 +254,34 @@ export function SourcesPanel() {
 }
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+// One line per account of a multi-account export, without any digits.
+type AccountImport = {
+  account: string;
+  card: string | null;
+  status: "imported" | "unchanged" | "skipped";
+  reason: string | null;
+  added: number;
+  left_to_sync: number;
+  coverage_end: string | null;
+};
+function importSummary(accounts: AccountImport[]) {
+  const imported = accounts.filter((a) => a.status === "imported");
+  const skipped = accounts.length - imported.length;
+  const parts = imported.map(
+    (a) =>
+      `${a.card ?? a.account}: ${plural(a.added, "new row")}${
+        a.left_to_sync
+          ? ` through ${a.coverage_end}, ${a.left_to_sync} later rows left to the synced account`
+          : ""
+      }`,
+  );
+  return `${imported.length ? parts.join("; ") : "Nothing new"}${
+    skipped
+      ? `. ${plural(skipped, "account")} skipped (no matching card or nothing new).`
+      : "."
+  }`;
+}
 
 function SyncButton({
   id,
@@ -457,7 +487,9 @@ function CsvImport({
               mask: text("mask") || null,
             },
           }
-        : { account_id: target }),
+        : target === "digits"
+          ? {}
+          : { account_id: target }),
     });
     form.reset();
   }
@@ -471,7 +503,10 @@ function CsvImport({
         <p>
           Each file is imported once. Its own first and last transaction dates
           are recorded as coverage. Issuer layouts marked unverified are based
-          on typical exports; check the result after importing.
+          on typical exports; check the result after importing. A Copilot Money
+          export holds every account: each one goes to the card with the same
+          last four digits, and rows a synced account already covers are left to
+          it.
         </p>
         <details className="settings-disclosure">
           <summary>Import a statement CSV</summary>
@@ -499,6 +534,10 @@ function CsvImport({
                 onChange={(e) => setTarget(e.target.value)}
               >
                 <option value="new">A new account…</option>
+                <option value="digits">
+                  The card with each account&apos;s digits (Copilot Money
+                  export)
+                </option>
                 {accounts.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.institution} · {a.name}

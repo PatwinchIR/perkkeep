@@ -1,25 +1,56 @@
-// Owner-run: links synced accounts to cards and runs the matchers against production, using the
-// app's own code (linkAccounts, runMatchers) in one interactive transaction as perkkeep_app with
-// the owner's identity set. It connects over Neon's WebSocket endpoint on port 443, so it works
-// where port 5432 is blocked. Credentials come from .local/neon.https.env (see neon-https.mjs).
+// Owner-run: links synced accounts to cards, optionally imports a statement export and runs
+// named ledger operations, then runs the matchers against production, using the app's own code
+// (linkAccounts, importStatement, runOperation, runMatchers) in one interactive transaction as
+// perkkeep_app with the owner's identity set. It connects over Neon's WebSocket endpoint on port
+// 443, so it works where port 5432 is blocked. Credentials come from .local/neon.https.env (see
+// neon-https.mjs).
 //
 //   npm run neon:reconcile -- --email you@example.com [--add-researched] [--dry-run]
+//       [--import path/to/export.csv] [--op <ledger operation> --input-file path/to/input.json]...
 //
 // --add-researched adds each confirmed card's researched benefits (data/benefits) first, as the
 // card page's "Add researched benefits" button does.
+// --import imports a statement CSV exactly as Settings does (D23, D53): a Copilot Money export is
+// split by account and matched to cards by last four digits. The file is read here and never
+// stored; only its parsed rows reach the ledger.
+// --op runs one named ledger operation (src/server/ledger.ts) with the JSON object in the file,
+// so card digits and identifiers stay off the command line. Repeat the pair for several.
 import { readFileSync } from "node:fs";
+import { basename } from "node:path";
 import { EnvHttpProxyAgent, setGlobalDispatcher, WebSocket } from "undici";
 import { neonConfig, Pool, types } from "@neondatabase/serverless";
 import type { Tx } from "../src/server/db";
 import { linkAccounts } from "../src/server/sources/sync";
+import { importStatement } from "../src/server/sources/import";
 import { runMatchers } from "../src/server/matchers";
-import { addResearchedBenefits } from "../src/server/ledger";
+import {
+  addResearchedBenefits,
+  operations,
+  runOperation,
+  type Operation,
+} from "../src/server/ledger";
 
 const args = process.argv.slice(2);
 const email = args[args.indexOf("--email") + 1]?.toLowerCase();
 if (!args.includes("--email") || !email)
   throw new Error("--email is required (the owner's sign-in email).");
 const dryRun = args.includes("--dry-run");
+const importPath = args.includes("--import")
+  ? args[args.indexOf("--import") + 1]
+  : undefined;
+if (args.includes("--import") && !importPath)
+  throw new Error("--import needs a file path.");
+const ops: { op: Operation; input: unknown }[] = [];
+for (let i = 0; i < args.length; i++) {
+  if (args[i] !== "--op") continue;
+  const op = args[i + 1] as Operation;
+  const fileFlag = args.indexOf("--input-file", i + 2);
+  if (!op || !(op in operations) || fileFlag < 0 || !args[fileFlag + 1])
+    throw new Error(
+      "--op needs a ledger operation name followed by --input-file <path>.",
+    );
+  ops.push({ op, input: JSON.parse(readFileSync(args[fileFlag + 1], "utf8")) });
+}
 const env = Object.fromEntries(
   readFileSync(".local/neon.https.env", "utf8")
     .split("\n")
@@ -83,6 +114,44 @@ try {
         );
     }
   }
+  for (const { op, input } of ops) {
+    const result = (await runOperation(tx, op, input)) as Record<
+      string,
+      unknown
+    >;
+    console.log(
+      `${op}: ${result && typeof result === "object" && "id" in result ? `record ${String(result.id)}` : "done"}`,
+    );
+  }
+  if (importPath) {
+    const imported = await importStatement(tx, {
+      file_name: basename(importPath).slice(0, 200),
+      file_text: readFileSync(importPath, "utf8"),
+    });
+    console.log(`Import (${imported.format.label}):`);
+    if ("accounts" in imported)
+      // Digits are left out on purpose: this output lands in terminals and transcripts.
+      console.table(
+        imported.accounts.map((a) => ({
+          account: a.account,
+          card: a.card ?? "",
+          status: a.status,
+          rows: a.rows,
+          added: a.added,
+          unchanged: a.unchanged,
+          left_to_sync: a.left_to_sync,
+          coverage: a.coverage_start
+            ? `${a.coverage_start} to ${a.coverage_end}`
+            : "",
+          reason: a.reason ?? "",
+        })),
+      );
+    else
+      console.log(
+        `  ${imported.added} rows added, ${imported.unchanged} unchanged${imported.replay ? " (replay)" : ""}`,
+      );
+    console.log("Matching after import:", JSON.stringify(imported.matched));
+  }
   const matched = await runMatchers(tx, "manual");
   const { rows: accounts } = await client.query(
     `select a.institution, a.name, a.mapping_status, c.display_name as card
@@ -91,6 +160,22 @@ try {
   );
   console.table(accounts);
   console.log("Matching:", JSON.stringify(matched));
+  // What the ledger now holds per benefit period: totals only, no transaction rows.
+  const { rows: progress } = await client.query(
+    `select c.display_name as card, b.name as benefit, p.period_start, p.period_end_exclusive, p.coverage_status,
+            p.allowance_cents,
+            coalesce(sum(e.amount_cents) filter (where e.confidence='confirmed'),0)::int as confirmed_cents,
+            coalesce(sum(e.amount_cents) filter (where e.confidence='candidate'),0)::int as candidate_cents,
+            count(e.id)::int as evidence_rows
+     from public.benefit_periods p
+     join public.benefits b on b.id=p.benefit_id join public.cards c on c.id=b.card_id
+     left join public.redemption_evidence e on e.benefit_period_id=p.id
+       and not exists(select 1 from public.redemption_evidence l where l.supersedes_evidence_id=e.id)
+     where b.enabled
+     group by c.display_name, b.name, p.period_start, p.period_end_exclusive, p.coverage_status, p.allowance_cents
+     order by c.display_name, b.name, p.period_start`,
+  );
+  console.table(progress);
   await client.query(dryRun ? "rollback" : "commit");
   console.log(dryRun ? "Dry run: nothing was saved." : "Saved.");
 } catch (e) {

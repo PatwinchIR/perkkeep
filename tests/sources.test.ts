@@ -217,7 +217,50 @@ describe("CSV statements (synthetic files)", () => {
     );
     expect(() => parseStatement("Foo,Bar\n1,2\n")).toThrow(/not supported/);
   });
+  it("reads a Copilot Money export: flips signs, names each row's account and drops transfers, pending and unplaced rows", () => {
+    const s = parseStatement(COPILOT_EXPORT);
+    expect(s.format.id).toBe("copilot-money");
+    expect(
+      s.rows.map((r) => [
+        r.transactedOn,
+        r.amountCents,
+        r.description,
+        r.account?.name,
+        r.account?.mask,
+      ]),
+    ).toEqual([
+      ["2026-10-01", -1200, "Synthetic Cafe", "Synthetic Rewards", "4343"],
+      [
+        "2026-10-02",
+        500,
+        "Synthetic Credit $300-year",
+        "Synthetic Rewards",
+        "4343",
+      ],
+      ["2026-10-20", -700, "Synthetic Grocer", "Synthetic Rewards", "4343"],
+      ["2026-10-03", -300, "Synthetic Toll", "Synthetic Checking", "1111"],
+      ["2026-10-06", -500, "Synthetic Bakery", "Apple\u00a0Card", null],
+    ]);
+    expect([s.coverageStart, s.coverageEnd]).toEqual([
+      "2026-10-01",
+      "2026-10-20",
+    ]);
+  });
 });
+
+// Synthetic Copilot Money export: header as Copilot writes it, invented accounts and digits.
+const COPILOT_EXPORT = [
+  "date,name,amount,status,category,parent category,excluded,tags,type,account,account mask,note,recurring",
+  "2026-10-01,Synthetic Cafe,12,posted,Restaurants,Food,false,,regular,Synthetic Rewards,4343,,",
+  '2026-10-02,"Synthetic Credit $300-year",-5,posted,Travel,Travel,false,,regular,Synthetic Rewards,4343,,',
+  "2026-10-20,Synthetic Grocer,7,posted,Groceries,Food,false,,regular,Synthetic Rewards,4343,,",
+  "2026-10-21,Synthetic Pending,3,pending,Shops,Shops,false,,regular,Synthetic Rewards,4343,,",
+  "2026-10-05,Payment Thank You,-200,posted,Internal Transfer,Internal Transfer,false,,internal transfer,Synthetic Rewards,4343,,",
+  "2026-10-03,Synthetic Toll,3,posted,Transportation,Transportation,false,,regular,Synthetic Checking,1111,,",
+  "2026-10-04,Synthetic Orphan,4,posted,Other,Other,false,,regular,,,,",
+  "2026-10-06,Synthetic Bakery,5,posted,Restaurants,Food,false,,regular,Apple\u00a0Card,,,",
+  "",
+].join("\n");
 
 describe("sync and import ledger behavior (synthetic owner, restricted role)", () => {
   let owner: Awaited<ReturnType<typeof user>>;
@@ -499,6 +542,111 @@ describe("sync and import ledger behavior (synthetic owner, restricted role)", (
         first.import.account_id,
       ]),
     ).toHaveLength(3);
+  });
+
+  it("splits a Copilot Money export by account, links by digits, leaves synced days to the sync and replays as a no-op", async () => {
+    const card = await insert(owner, "cards", {
+      issuer: "Synthetic Issuer",
+      display_name: "Synthetic Rewards Card",
+      last4: "4343",
+      status: "active",
+      identity_verified_at: new Date().toISOString(),
+    });
+    // A synced account the owner linked to the card, with history from 2026-10-15.
+    const synced = await insert(owner, "accounts", {
+      source: "simplefin",
+      external_ref: randomBytes(32).toString("hex"),
+      institution: "Synthetic Issuer",
+      name: "Synthetic Rewards (4343)",
+      mask: "4343",
+      kind: "credit",
+      card_id: card.id,
+      proposed_card_id: card.id,
+      mapping_status: "confirmed",
+      mapping_confirmed_at: new Date().toISOString(),
+    });
+    await owner.q("select public.record_account_sync($1,$2,$3,null)", [
+      synced.id,
+      "2026-10-15",
+      "2026-10-27",
+    ]);
+    type Result = {
+      replay: boolean;
+      added: number;
+      accounts: {
+        account: string;
+        card: string | null;
+        status: string;
+        reason: string | null;
+        added: number;
+        left_to_sync: number;
+        coverage_start: string | null;
+        coverage_end: string | null;
+      }[];
+    };
+    const first = (await runSourceOperation(owner.id, "importCsv", {
+      file_name: "synthetic-copilot.csv",
+      file_text: COPILOT_EXPORT,
+    })) as Result;
+    expect(first.replay).toBe(false);
+    expect(first.added).toBe(2);
+    expect(first.accounts).toEqual([
+      expect.objectContaining({
+        account: "Apple\u00a0Card",
+        card: null,
+        status: "skipped",
+        reason: "No active card matches its product.",
+      }),
+      expect.objectContaining({
+        account: "Synthetic Checking",
+        card: null,
+        status: "skipped",
+        reason: "No card has its last four digits.",
+      }),
+      expect.objectContaining({
+        account: "Synthetic Rewards",
+        card: "Synthetic Rewards Card",
+        status: "imported",
+        added: 2,
+        left_to_sync: 1,
+        coverage_start: "2026-10-01",
+        coverage_end: "2026-10-14",
+      }),
+    ]);
+    const [csvAccount] = await owner.q(
+      "select a.*, c.earliest_synced_on, c.synced_through from public.accounts a join public.account_coverage c on c.account_id=a.id where a.source='csv' and a.card_id=$1",
+      [card.id],
+    );
+    expect(csvAccount.mapping_status).toBe("confirmed");
+    expect(csvAccount.mask).toBe("4343");
+    expect([csvAccount.earliest_synced_on, csvAccount.synced_through]).toEqual([
+      "2026-10-01",
+      "2026-10-14",
+    ]);
+    const rows = await owner.q(
+      "select transacted_on, amount_cents, description from public.transactions where account_id=$1 order by transacted_on",
+      [csvAccount.id],
+    );
+    expect(
+      rows.map((r) => [r.transacted_on, Number(r.amount_cents), r.description]),
+    ).toEqual([
+      ["2026-10-01", -1200, "Synthetic Cafe"],
+      ["2026-10-02", 500, "Synthetic Credit $300-year"],
+    ]);
+    const again = (await runSourceOperation(owner.id, "importCsv", {
+      file_name: "synthetic-copilot.csv",
+      file_text: COPILOT_EXPORT,
+    })) as Result;
+    expect(again.replay).toBe(true);
+    expect(
+      again.accounts.find((a) => a.account === "Synthetic Rewards")?.status,
+    ).toBe("unchanged");
+    expect(
+      await owner.q(
+        "select 1 from public.accounts where source='csv' and card_id=$1",
+        [card.id],
+      ),
+    ).toHaveLength(1);
   });
 });
 
