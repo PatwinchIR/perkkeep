@@ -54,7 +54,7 @@ D45 to D50 in [decisions.md](../decisions.md): derived alerts with append-only a
 | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | No push notifications; alerts appear only when the app is opened       | The Review tab shows a count on every load, and the app refreshes on focus and every minute while open.          |
 | MCP endpoint and AI proposals not built                                | The deterministic matcher and the review queue cover statement credits; anything else is entered on the row.     |
-| Six products still have no researched rules                            | "Add benefit" with the issuer's page, as before.                                                                 |
+| All eight products are researched (D54); some rules still need dates   | Custom-window rules carry an assumed start where no transaction shows one (D55); correct it on the card page.    |
 | The 180-day re-check interval is a default, not an issuer-derived fact | "Terms unchanged today" clears it in one click; change the constant in `src/lib/alerts.ts` if it nags too often. |
 | WebKit phone tests not run in the agent container                      | Run `npx playwright install webkit` and `npm run test:e2e` locally.                                              |
 
@@ -65,3 +65,24 @@ D45 to D50 in [decisions.md](../decisions.md): derived alerts with append-only a
 - Import: nine exported card accounts matched cards by their last four digits (the four Chase accounts share one export name and differ only by digits). Each landed in its own CSV account linked to the card, with rows from 2026-07-31 on left to the SimpleFIN account. Bank accounts, a closed card and accounts without digits were skipped and listed.
 - Anniversaries: the Sapphire Reserve renewal fee posted 2026-09-01 and the new year's travel credits began 2026-08-28 and reached exactly $300 by 2026-09-12, so the anchor is 2026-08-28 (the open date may fall between 2026-08-08 and 2026-08-28; the card page can correct it). The Gold renewal fee posted on 3 July in 2023, 2024 and 2026, so its anchor is 2026-07-03.
 - Result: 13 confirmed credits. Sapphire Reserve annual travel credit, 2026-08-28 to 2027-08-28: $300 of $300 used, coverage complete. Exclusive Tables dining credit, first half of 2026: $150 of $150 used, coverage complete. The `dining credit` and `stubhub` patterns are verified from the export's wording. Nothing else in 2026 matched: the export holds no Gold dining, Dunkin' or Resy credit, and Lyft, DoorDash and Uber Cash are in-app credits that statements cannot show.
+
+## Researched benefits added in production (2026-10-28, third session)
+
+- PatwinchIR/perkkeep#7 (benefits research for all eight products) was merged into `main` through the REST API after main was merged into it. Both branches had added a decision D53; main's (Copilot Money import) is referenced from code, so the research decision became D54. 80/80 tests, typecheck and lint passed on the merged tree on a local PostgreSQL 16. Vercel deployed `main` to production and the deployment is Ready.
+- Production check over port 443: all five migrations are recorded, and `perkkeep_app` has no BYPASSRLS.
+- `npm run neon:reconcile -- --add-researched` plus ten `--op createBenefit` inputs ran in one transaction as `perkkeep_app` with the owner's identity, after an identical dry run.
+
+| Card                    | Added | Total now | How                                                                            |
+| ----------------------- | ----- | --------- | ------------------------------------------------------------------------------ |
+| Sapphire Reserve        | 10    | 17        | 1 by `addResearchedBenefits`, 9 custom windows (D55)                           |
+| Freedom Flex            | 2     | 2         | `addResearchedBenefits`                                                        |
+| Gold                    | 1     | 5         | `addResearchedBenefits`                                                        |
+| Freedom Unlimited       | 1     | 1         | `addResearchedBenefits`                                                        |
+| Ink Business Cash       | 1     | 1         | `addResearchedBenefits`                                                        |
+| Ink Business Preferred  | 1     | 1         | `createBenefit`, because the confirmed card has no catalog key                 |
+| Discover it, Prime Visa | 0     | 0         | Discover's Q4 categories are unverified; Prime Visa has no trackable allowance |
+
+- Dates from transactions: the Sapphire Reserve $75,000 tier (The Shops at Chase credit, Southwest $500 credit, Southwest A-List, World of Hyatt Explorist, IHG Diamond Elite) starts 2026-10-23, when recorded 2026 purchases passed $75,000. The Shops at Chase credit of $250 on 2026-10-26 confirms it and is now matched as fully used. If spend is missing from the history (August 2026 shows little), the true start is earlier; the end dates do not change.
+- Assumed dates (2026-10-28, need the owner's confirmation): Global Entry, TSA PreCheck or NEXUS credit (window to 2030-10-28); Apple TV and Apple Music (to 2027-10-28); DashPass (to 2030-01-01); IHG Platinum Elite (to 2028-01-01).
+- Not added: Gold's Hotel Collection credit and the six-month DashPass on both Freedom cards (custom windows outside Sapphire Reserve), and Ink Business Preferred's welcome offer (one-time, so it waits for the owner to match the approval terms).
+- The monthly terms-check task from [maintenance](../maintenance.md) was created as a desktop app task on the owner's Mac. Its prompt assumes a cloud session (`add_repo`, `/home/claude`), so the first run on 2026-11-01 should be watched.
