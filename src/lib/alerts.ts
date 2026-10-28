@@ -262,11 +262,13 @@ export function deriveAlerts(input: AlertInput): Alert[] {
     live = liveEvidence(data.evidence),
     alerts: Alert[] = [];
   const dayFor = (tz?: string | null) => localDate(now, tz ?? undefined);
+  const archived = (p: Period) => !!cards.get(p.card_id)?.archived_at;
   const active = data.periods.filter(
     (p) =>
       activePeriod(p, benefits.get(p.benefit_id), now) &&
       p.enabled &&
-      p.card_status === "active",
+      p.card_status === "active" &&
+      !archived(p),
   );
   const recentCutoff = new Date(
     now.getTime() - activityDays * 86400000,
@@ -276,7 +278,7 @@ export function deriveAlerts(input: AlertInput): Alert[] {
   };
 
   for (const card of data.cards)
-    if (!card.identity_verified_at)
+    if (!card.identity_verified_at && !card.archived_at)
       push({
         ...base,
         key: `setup:${card.id}`,
@@ -311,7 +313,8 @@ export function deriveAlerts(input: AlertInput): Alert[] {
 
   for (const b of data.benefits) {
     const card = cards.get(b.card_id);
-    if (!card || !b.enabled || card.status !== "active") continue;
+    if (!card || !b.enabled || card.status !== "active" || card.archived_at)
+      continue;
     const day = dayFor(card.issuer_timezone);
     if (b.effective_from > day || (b.effective_to && b.effective_to <= day))
       continue;
@@ -437,7 +440,7 @@ export function deriveAlerts(input: AlertInput): Alert[] {
   const candidateWindow = shiftDays(dayFor(), -45);
   for (const e of live) {
     const p = periods.get(e.benefit_period_id);
-    if (!p || !p.enabled || p.card_status !== "active") continue;
+    if (!p || !p.enabled || p.card_status !== "active" || archived(p)) continue;
     if (
       e.confidence === "candidate" &&
       p.period_end_exclusive > candidateWindow
@@ -479,7 +482,13 @@ export function deriveAlerts(input: AlertInput): Alert[] {
     }
   }
   for (const p of data.periods) {
-    if (!p.enabled || p.card_status !== "active" || !fullyUsed(p)) continue;
+    if (
+      !p.enabled ||
+      p.card_status !== "active" ||
+      archived(p) ||
+      !fullyUsed(p)
+    )
+      continue;
     const confirmedAt = live
       .filter(
         (e) => e.benefit_period_id === p.id && e.confidence === "confirmed",

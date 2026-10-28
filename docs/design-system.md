@@ -101,7 +101,7 @@ These items are observations for a later change. They were left out to keep this
 
 ## Benefit rows, progress bars and alerts (2026-10-28)
 
-Added with the Phase 2 alerts work (D44 to D46). All values reference tokens; no new literals were added outside `:root`.
+Added with the Phase 2 alerts work (D45 to D47). All values reference tokens; no new literals were added outside `:root`.
 
 - `.cadence-group` and `.cadence-group-heading`: one section per reset timeframe with a count and totals in `--text-xs`.
 - `.benefit-row`: a three-column grid on desktop (title, progress, status and toggle) that collapses to two columns at 760px with the bar on its own line. The row title is an `h3` at `--text-sm`. Hints use the warning pair; coverage notes use `--color-text-muted`.

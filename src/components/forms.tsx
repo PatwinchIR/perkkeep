@@ -1,9 +1,11 @@
 "use client";
 import { useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import type { Card, Benefit, Period, Evidence, SyncRun } from "@/lib/types";
 import { run } from "@/lib/api";
 import type { OperationInput } from "@/server/ledger";
 import { CATALOG } from "@/lib/catalog";
+import { KNOWN_PRODUCTS, issuerFor } from "@/lib/card-faces";
 import {
   CADENCES,
   localDate,
@@ -958,6 +960,97 @@ export function CoverageForm({
           disabled={busy || offline || !periods.length}
         >
           {busy ? "Saving…" : "Save reconciliation"}
+        </button>
+      </form>
+    </Dialog>
+  );
+}
+
+/** Adds a card by hand. It starts unverified; benefits wait for the owner's confirmation. */
+export function AddCardForm({ onClose }: { onClose: () => void }) {
+  const router = useRouter(),
+    { refresh, notice, offline } = useApp(),
+    [error, setError] = useState(""),
+    [busy, setBusy] = useState(false),
+    [issuer, setIssuer] = useState("");
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    const product = text(f, "product"),
+      issuerName = text(f, "issuer"),
+      short = product.toLowerCase().startsWith(`${issuerName.toLowerCase()} `)
+        ? product.slice(issuerName.length + 1)
+        : product;
+    setBusy(true);
+    setError("");
+    try {
+      const card = (await run("addCard", {
+        issuer: issuerName,
+        product_name: product || null,
+        display_name: text(f, "name") || short || issuerName,
+        last4: text(f, "last4") || null,
+      })) as { id: string };
+      await refresh();
+      notice("Card added. Confirm its identity before adding benefits.");
+      onClose();
+      router.push(`/cards/${card.id}`);
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Dialog title="Add a card" onClose={onClose}>
+      <p className="dialog-intro">
+        The card starts unverified. Nothing is assumed about its benefits until
+        you confirm its details with the issuer.
+      </p>
+      <form className="form-stack" onSubmit={submit}>
+        <label>
+          Product
+          <input
+            name="product"
+            list="known-products"
+            maxLength={150}
+            placeholder="For example, Chase Sapphire Reserve"
+            onChange={(e) => {
+              const guess = issuerFor(e.target.value);
+              if (guess) setIssuer(guess);
+            }}
+          />
+        </label>
+        <datalist id="known-products">
+          {KNOWN_PRODUCTS.map((p) => (
+            <option key={p} value={p} />
+          ))}
+        </datalist>
+        <label>
+          Issuer
+          <input
+            name="issuer"
+            required
+            maxLength={100}
+            value={issuer}
+            onChange={(e) => setIssuer(e.target.value)}
+          />
+        </label>
+        <label>
+          Nickname (optional)
+          <input name="name" maxLength={100} />
+        </label>
+        <label>
+          Last four digits (optional)
+          <input
+            name="last4"
+            inputMode="numeric"
+            pattern="[0-9]{4}"
+            maxLength={4}
+          />
+        </label>
+        <ErrorText error={error} />
+        <button className="primary" disabled={busy || offline}>
+          {busy ? "Adding…" : "Add card"}
         </button>
       </form>
     </Dialog>

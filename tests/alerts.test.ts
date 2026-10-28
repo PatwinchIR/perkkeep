@@ -40,6 +40,7 @@ function card(extra: Partial<Card> = {}): Card {
     cardmember_anchor_date: null,
     issuer_timezone: "America/New_York",
     catalog_key: null,
+    archived_at: null,
     created_at: daysAgo(30),
     updated_at: daysAgo(30),
     ...extra,

@@ -4,6 +4,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -36,6 +37,15 @@ export function useApp() {
   const value = useContext(Context);
   if (!value) throw new Error("App context unavailable");
   return value;
+}
+/** Cards still in use, and their periods. Removed cards stay in History and Settings. */
+export function useActive() {
+  const { data } = useApp();
+  return useMemo(() => {
+    const cards = data.cards.filter((c) => !c.archived_at);
+    const ids = new Set(cards.map((c) => c.id));
+    return { cards, periods: data.periods.filter((p) => ids.has(p.card_id)) };
+  }, [data]);
 }
 const EMPTY: Snapshot = {
   cardArt: [],

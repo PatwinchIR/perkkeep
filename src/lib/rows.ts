@@ -10,6 +10,7 @@ export type Json =
 
 // public.cards
 export type CardRow = {
+  archived_at: string | null;
   cardmember_anchor_date: string | null;
   catalog_key: string | null;
   created_at: string;
