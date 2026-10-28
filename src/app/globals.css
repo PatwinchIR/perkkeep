@@ -1150,6 +1150,24 @@ small {
 .settings-card .badge {
   margin: 18px 0;
 }
+.source-linked {
+  align-self: start;
+}
+.source-linked-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.source-linked-heading h2 {
+  margin: 0;
+}
+.source-linked-heading .badge {
+  margin: 0;
+}
+.source-linked .secondary {
+  justify-self: start;
+}
 .settings-card .primary {
   display: flex;
   margin-bottom: 12px;

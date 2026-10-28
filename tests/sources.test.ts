@@ -353,7 +353,7 @@ describe("sync and import ledger behavior (synthetic owner, restricted role)", (
       "select a.*, c.* from public.accounts a join public.account_coverage c on c.account_id=a.id",
     );
     expect(account).toMatchObject({
-      mapping_status: "proposed",
+      mapping_status: "confirmed",
       mask: "4242",
       synced_through: "2026-10-27",
       last_error: null,
@@ -432,9 +432,9 @@ describe("sync and import ledger behavior (synthetic owner, restricted role)", (
     expect(calls).toBe(1);
   });
 
-  it("confirms a proposed mapping only for the owner's own card", async () => {
+  it("links a mapping only to the owner's own card", async () => {
     const [account] = await owner.q(
-      "select id, proposed_card_id from public.accounts where mapping_status='proposed' limit 1",
+      "select id, proposed_card_id from public.accounts where mapping_status='confirmed' limit 1",
     );
     const stranger = await user();
     const foreign = await insert(stranger, "cards", {
@@ -499,5 +499,105 @@ describe("sync and import ledger behavior (synthetic owner, restricted role)", (
         first.import.account_id,
       ]),
     ).toHaveLength(3);
+  });
+});
+
+describe("card accounts become the owner's cards (synthetic owner, D41)", () => {
+  it("fills starter cards, creates missing ones, skips bank accounts, hides unused starters and respects unlinking", async () => {
+    const { loadSnapshot } = await import("../src/server/ledger");
+    const { linkAccounts } = await import("../src/server/sources/sync");
+    const owner = await user();
+    await owner.q("select public.initialize_cards()");
+    const account = (id: string, name: string, conn: string) => ({
+      id,
+      name,
+      conn_id: conn,
+      currency: "USD",
+      balance: "0",
+      "balance-date": epoch("2026-10-27"),
+      transactions: [],
+    });
+    const batch = normalizeAccountSet({
+      errlist: [],
+      connections: [
+        { conn_id: "C1", name: "Synthetic Chase" },
+        { conn_id: "C2", name: "Synthetic Citi" },
+        { conn_id: "C3", name: "Apple Card" },
+      ],
+      accounts: [
+        account("A1", "Synthetic Sapphire Reserve (...1111)", "C1"),
+        account("A2", "Synthetic Strata ...2222", "C2"),
+        account("A3", "Synthetic Total Checking ...3333", "C1"),
+        account("A4", "Apple Card", "C3"),
+      ],
+    } as never);
+    const id = randomUUID();
+    await withOwner(owner.id, (tx) =>
+      tx.query(
+        "insert into public.source_connections(id,source,encrypted_secret) values($1,'simplefin',$2)",
+        [
+          id,
+          encryptSecret(
+            "https://user:pass@bridge.example.com/simplefin",
+            secretLabel(id),
+          ),
+        ],
+      ),
+    );
+    await syncConnection(owner.id, id, "claim", {
+      simplefin: { source: "simplefin", fetch: async () => batch },
+      plaid: { source: "plaid", fetch: async () => batch },
+    });
+    const linked = await owner.q(
+      `select a.name, a.mapping_status, c.catalog_key, c.last4, c.status, c.identity_verified_at is not null as verified
+       from public.accounts a left join public.cards c on c.id=a.card_id order by a.name`,
+    );
+    expect(
+      linked.map((r) => [
+        r.name,
+        r.mapping_status,
+        r.catalog_key,
+        r.last4,
+        r.verified,
+      ]),
+    ).toEqual([
+      ["Apple Card", "confirmed", "apple-card", null, true],
+      [
+        "Synthetic Sapphire Reserve (...1111)",
+        "confirmed",
+        "chase-sapphire-reserve",
+        "1111",
+        true,
+      ],
+      ["Synthetic Strata ...2222", "confirmed", "citi-strata", "2222", true],
+      ["Synthetic Total Checking ...3333", "unmapped", null, null, false],
+    ]);
+    // The starter Sapphire Reserve was filled in, not duplicated.
+    expect(
+      await owner.q(
+        "select id from public.cards where catalog_key='chase-sapphire-reserve'",
+      ),
+    ).toHaveLength(1);
+    const snapshot = await withOwner(owner.id, (tx) => loadSnapshot(tx));
+    expect(snapshot.cards.map((c) => c.catalog_key).sort()).toEqual([
+      "apple-card",
+      "chase-sapphire-reserve",
+      "citi-strata",
+    ]);
+    const strata = await owner.one(
+      "select id from public.accounts where name like '%Strata%'",
+    );
+    await runSourceOperation(owner.id, "rejectMapping", {
+      account_id: strata.id,
+    });
+    await withOwner(owner.id, (tx) => linkAccounts(tx));
+    expect(
+      (
+        await owner.one(
+          "select mapping_status from public.accounts where id=$1",
+          [strata.id],
+        )
+      ).mapping_status,
+    ).toBe("rejected");
   });
 });

@@ -8,6 +8,7 @@ import { claimSetupToken, setupTokenClaimUrl } from "./simplefin";
 import { parseStatement } from "./csv";
 import {
   defaultAdapters,
+  linkAccounts,
   secretLabel,
   SyncCooldownError,
   syncConnection,
@@ -204,7 +205,11 @@ export async function runSourceOperation(
       });
     }
     case "runMatchers":
-      return withOwner(ownerId, (tx) => runMatchers(tx, "manual"));
+      // Links any synced accounts first, without another request to the source.
+      return withOwner(ownerId, async (tx) => {
+        await linkAccounts(tx);
+        return runMatchers(tx, "manual");
+      });
     case "confirmMapping": {
       const i = parsed.data as SourceOperationInput<"confirmMapping">;
       return withOwner(ownerId, async (tx) => {

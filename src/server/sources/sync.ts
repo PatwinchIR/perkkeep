@@ -39,35 +39,211 @@ export function syncWindow(
   return { start: start < earliest ? earliest : start, endExclusive };
 }
 
-// Proposes a card for each unmapped account whose institution matches the card's issuer and whose
-// last four digits equal the card's. Ambiguous matches propose nothing. The owner confirms each one.
-const ISSUERS: [RegExp, RegExp][] = [
-  [/american express|amex/i, /american express/i],
-  [/chase|jpmorgan/i, /chase/i],
-  [/discover|capital one/i, /discover/i],
-  [/citi/i, /citi/i],
-  [/apple|goldman/i, /apple/i],
+// Each synced card account becomes one of the owner's cards (D41). An account whose last four
+// digits match exactly one card of the same issuer is linked to it. Otherwise the product named in
+// the account (for example "Sapphire Reserve") fills in that product's starter card, or a new card
+// is created from what the issuer reported. Links are confirmed on the owner's standing
+// instruction; the owner can unlink any of them, and an unlinked account is never relinked here.
+const ISSUERS: { institution: RegExp; card: RegExp; name: string }[] = [
+  {
+    institution: /american express|amex/i,
+    card: /american express/i,
+    name: "American Express",
+  },
+  { institution: /chase|jpmorgan/i, card: /chase/i, name: "Chase" },
+  { institution: /discover/i, card: /discover/i, name: "Discover" },
+  { institution: /citi/i, card: /citi/i, name: "Citi" },
+  { institution: /apple|goldman/i, card: /apple/i, name: "Apple" },
+  { institution: /capital one/i, card: /capital one/i, name: "Capital One" },
 ];
-export async function proposeMappings(tx: Tx) {
+const PRODUCTS: {
+  key: string;
+  issuer: string;
+  pattern: RegExp;
+  display_name: string;
+  product_name: string;
+}[] = [
+  {
+    key: "amex-gold",
+    issuer: "American Express",
+    pattern: /gold/i,
+    display_name: "Gold",
+    product_name: "American Express Gold",
+  },
+  {
+    key: "chase-sapphire-reserve",
+    issuer: "Chase",
+    pattern: /sapphire\s*reserve/i,
+    display_name: "Sapphire Reserve",
+    product_name: "Chase Sapphire Reserve",
+  },
+  {
+    key: "chase-freedom-unlimited",
+    issuer: "Chase",
+    pattern: /freedom\s*unlimited/i,
+    display_name: "Freedom Unlimited",
+    product_name: "Chase Freedom Unlimited",
+  },
+  {
+    key: "chase-freedom-flex",
+    issuer: "Chase",
+    pattern: /freedom\s*flex/i,
+    display_name: "Freedom Flex",
+    product_name: "Chase Freedom Flex",
+  },
+  {
+    key: "chase-prime-visa",
+    issuer: "Chase",
+    pattern: /prime|amazon/i,
+    display_name: "Prime Visa",
+    product_name: "Chase Prime Visa",
+  },
+  {
+    key: "chase-ink-business-cash",
+    issuer: "Chase",
+    pattern: /ink.*cash/i,
+    display_name: "Ink Business Cash",
+    product_name: "Chase Ink Business Cash",
+  },
+  {
+    key: "chase-ink-business-preferred",
+    issuer: "Chase",
+    pattern: /ink.*preferred/i,
+    display_name: "Ink Business Preferred",
+    product_name: "Chase Ink Business Preferred",
+  },
+  {
+    key: "discover-it",
+    issuer: "Discover",
+    pattern: /discover/i,
+    display_name: "Discover it",
+    product_name: "Discover it",
+  },
+  {
+    key: "citi-costco-anywhere",
+    issuer: "Citi",
+    pattern: /costco/i,
+    display_name: "Costco Anywhere Visa",
+    product_name: "Citi Costco Anywhere Visa",
+  },
+  {
+    key: "citi-strata",
+    issuer: "Citi",
+    pattern: /strata/i,
+    display_name: "Strata",
+    product_name: "Citi Strata",
+  },
+  {
+    key: "citi-double-cash",
+    issuer: "Citi",
+    pattern: /double\s*cash/i,
+    display_name: "Double Cash",
+    product_name: "Citi Double Cash",
+  },
+  {
+    key: "apple-card",
+    issuer: "Apple",
+    pattern: /apple/i,
+    display_name: "Apple Card",
+    product_name: "Apple Card",
+  },
+];
+const MASK_SUFFIX = /\s*(?:\(|-|\s)?(?:\.\.\.|x+|\*+)?\d{4}\)?\s*$/i;
+
+export function identifyAccount(a: { institution: string; name: string }) {
+  const text = `${a.institution} ${a.name}`;
+  const issuer = ISSUERS.find((i) => i.institution.test(text));
+  const product = issuer
+    ? PRODUCTS.find((p) => p.issuer === issuer.name && p.pattern.test(a.name))
+    : undefined;
+  return { issuer, product };
+}
+
+export async function linkAccounts(tx: Tx) {
   const { rows: accounts } = await tx.query(
-    "select id, institution, name, mask from public.accounts where mapping_status='unmapped' and mask is not null",
-  );
-  const { rows: cards } = await tx.query(
-    "select id, issuer, last4 from public.cards where last4 is not null",
+    `select id, institution, name, mask, kind from public.accounts
+     where mapping_status='unmapped' and source in ('simplefin','plaid') order by institution, name, id`,
   );
   for (const a of accounts) {
-    const issuer = ISSUERS.find(([inst]) =>
-      inst.test(`${a.institution} ${a.name}`),
-    );
-    const matches = cards.filter(
-      (c) => c.last4 === a.mask && (!issuer || issuer[1].test(c.issuer)),
-    );
-    if (issuer && matches.length === 1)
-      await tx.query(
-        "update public.accounts set proposed_card_id=$2, mapping_status='proposed' where id=$1",
-        [a.id, matches[0].id],
+    const { issuer, product } = identifyAccount(a);
+    // Checking, savings and other accounts never become cards.
+    if (a.kind !== "credit" && !product) continue;
+    // Without last four digits, only a named product with exactly one possible card is linked.
+    if (!a.mask && !product) continue;
+    await tx.query("savepoint link_account");
+    try {
+      const cardId = await cardFor(tx, a, issuer, product);
+      if (cardId) {
+        await tx.query(
+          `update public.accounts set card_id=$2, proposed_card_id=$2, mapping_status='confirmed', mapping_confirmed_at=now()
+           where id=$1`,
+          [a.id, cardId],
+        );
+        // The issuer's own account confirms the card, unless the owner marked it closed.
+        await tx.query(
+          `update public.cards set status='active', identity_verified_at=coalesce(identity_verified_at, now())
+           where id=$1 and status<>'closed'`,
+          [cardId],
+        );
+      }
+      await tx.query("release savepoint link_account");
+    } catch (e) {
+      // A card that cannot be created leaves the account for the owner to link; the sync goes on.
+      await tx.query("rollback to savepoint link_account");
+      console.error(
+        "PerkKeep account link failed",
+        e instanceof Error ? e.name : "unknown",
       );
+    }
   }
+}
+
+async function cardFor(
+  tx: Tx,
+  a: { institution: string; name: string; mask: string | null },
+  issuer: (typeof ISSUERS)[number] | undefined,
+  product: (typeof PRODUCTS)[number] | undefined,
+): Promise<string | undefined> {
+  const { rows: cards } = await tx.query(
+    "select id, issuer, last4, catalog_key from public.cards",
+  );
+  if (a.mask) {
+    const sameDigits = cards.filter(
+      (c) => c.last4 === a.mask && (!issuer || issuer.card.test(c.issuer)),
+    );
+    if (sameDigits.length > 1) return undefined;
+    if (sameDigits.length === 1) return sameDigits[0].id;
+  } else {
+    const same = cards.filter((c) => c.catalog_key === product!.key);
+    if (same.length === 1) return same[0].id;
+    if (same.length > 1) return undefined;
+  }
+  const starter =
+    product && a.mask
+      ? cards.find((c) => c.catalog_key === product.key && !c.last4)
+      : undefined;
+  if (starter) {
+    await tx.query(
+      `update public.cards set last4=$2, status='active', identity_verified_at=coalesce(identity_verified_at, now())
+       where id=$1`,
+      [starter.id, a.mask],
+    );
+    return starter.id;
+  }
+  const taken = product && cards.some((c) => c.catalog_key === product.key);
+  const name = a.name.replace(MASK_SUFFIX, "").trim().slice(0, 100) || "Card";
+  const { rows } = await tx.query(
+    `insert into public.cards(issuer, display_name, product_name, last4, catalog_key, status, identity_verified_at)
+     values ($1,$2,$3,$4,$5,'active',now()) returning id`,
+    [
+      issuer?.name ?? (a.institution.slice(0, 100) || "Unknown issuer"),
+      product?.display_name ?? name,
+      product?.product_name ?? null,
+      a.mask,
+      product && !taken ? product.key : null,
+    ],
+  );
+  return rows[0].id;
 }
 
 export async function storeBatch(
@@ -170,7 +346,7 @@ export async function storeBatch(
       a.error,
     ]);
   }
-  await proposeMappings(tx);
+  await linkAccounts(tx);
   return { accounts: accountIds.size, added, revised };
 }
 

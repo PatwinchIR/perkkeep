@@ -447,3 +447,45 @@ test("uploads private card art, serves it uncached to its owner only, and keeps 
   await expect(page.locator(".card-art-panel img.face-art")).toHaveCount(0);
   await noOverflow(page);
 });
+
+test("shows a linked SimpleFIN connection without the token box, and hides unused starter cards", async ({
+  page,
+}) => {
+  const owner = await user();
+  await owner.q("select public.initialize_cards()");
+  // Synthetic connection and account; the secret is a placeholder that is never decrypted here.
+  const [connection] = await owner.q(
+    "insert into public.source_connections(source,encrypted_secret,last_success_at) values('simplefin','v1.synthetic',now()) returning id",
+  );
+  const [card] = await owner.q(
+    "update public.cards set last4='4242', status='active', identity_verified_at=now() where catalog_key='chase-sapphire-reserve' returning id",
+  );
+  await owner.q(
+    `insert into public.accounts(source,connection_id,external_ref,institution,name,mask,kind,card_id,proposed_card_id,mapping_status,mapping_confirmed_at)
+     values('simplefin',$1,$2,'Synthetic Chase','Synthetic Sapphire ...4242','4242','credit',$3,$3,'confirmed',now())`,
+    [connection.id, "a".repeat(64), card.id],
+  );
+  await login(page, owner);
+  await expect(page.locator(".card-tile")).toHaveCount(1);
+  await page.goto("/settings");
+  await expect(page.getByRole("heading", { name: "SimpleFIN" })).toBeVisible();
+  await expect(page.locator(".badge", { hasText: "Linked" })).toBeVisible();
+  await expect(page.getByLabel("SimpleFIN setup token")).toHaveCount(0);
+  const row = page
+    .locator(".account-row")
+    .filter({ hasText: "Synthetic Sapphire" });
+  await expect(row).toContainText("Linked to Sapphire Reserve · •••• 4242");
+  await page
+    .getByRole("button", { name: "Replace with a new setup token" })
+    .click();
+  await expect(page.getByLabel("SimpleFIN setup token")).toBeVisible();
+  await page
+    .getByRole("button", { name: "Keep the current connection" })
+    .click();
+  await expect(page.getByLabel("SimpleFIN setup token")).toHaveCount(0);
+  await page.screenshot({
+    path: "test-results/settings-linked.png",
+    fullPage: true,
+  });
+  await noOverflow(page);
+});

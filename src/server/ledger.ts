@@ -276,8 +276,19 @@ export async function runOperation(
 // Reads everything the PWA shows. Current periods are created inside savepoints so one rule that
 // cannot generate a period (for example, an unconfirmed anniversary) does not hide the others.
 export async function loadSnapshot(tx: Tx): Promise<Snapshot> {
+  // Once a synced account is linked, starter cards that nothing has confirmed, linked or given
+  // benefits are hidden (D41). They stay in the database and reappear if every link is removed.
   const cards = (
-    await tx.query("select * from public.cards order by display_name, id")
+    await tx.query(
+      `select * from public.cards c
+       where not (
+         c.last4 is null and c.identity_verified_at is null
+         and exists(select 1 from public.accounts a where a.mapping_status='confirmed')
+         and not exists(select 1 from public.accounts a where a.card_id=c.id or a.proposed_card_id=c.id)
+         and not exists(select 1 from public.benefits b where b.card_id=c.id)
+       )
+       order by display_name, id`,
+    )
   ).rows;
   const benefits = (
     await tx.query("select * from public.benefits order by created_at, id")

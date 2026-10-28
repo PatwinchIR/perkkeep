@@ -22,7 +22,11 @@ const FRESHNESS = {
 export function SourcesPanel() {
   const { data, refresh, notice, offline } = useApp(),
     [busy, setBusy] = useState(""),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [replacing, setReplacing] = useState(false);
+  const linked = data.connections.filter(
+    (c) => c.source === "simplefin" && c.status !== "revoked",
+  );
   async function act(label: string, fn: () => Promise<unknown>, done: string) {
     setBusy(label);
     setError("");
@@ -47,9 +51,10 @@ export function SourcesPanel() {
           setup_token: String(f.get("token") ?? "").trim(),
           label: String(f.get("label") ?? "").trim(),
         }),
-      "SimpleFIN connected. The first sync has run.",
+      "SimpleFIN connected. The first sync has run and your card accounts are linked.",
     );
     form.reset();
+    setReplacing(false);
   }
   const cardName = (id: string | null) => {
     const c = data.cards.find((x) => x.id === id);
@@ -61,11 +66,7 @@ export function SourcesPanel() {
         <h2 id="sources-title">Connected accounts</h2>
         <button
           className="secondary"
-          disabled={
-            !!busy ||
-            offline ||
-            !data.accounts.some((a) => a.mapping_status === "confirmed")
-          }
+          disabled={!!busy || offline || !data.accounts.length}
           onClick={() =>
             void act(
               "match",
@@ -78,10 +79,11 @@ export function SourcesPanel() {
         </button>
       </div>
       <p className="hint">
+        Each synced card account becomes one of your cards and is linked to it.
         PerkKeep matches transactions on linked accounts to your benefits after
         every sync. Matches wait in Review until you confirm them, except issuer
-        credits whose description has been verified. Accounts that are not
-        linked to a card are never used.
+        credits whose description has been verified. Unlinked accounts are never
+        used.
       </p>
       {error && (
         <p role="alert" className="form-error">
@@ -89,26 +91,73 @@ export function SourcesPanel() {
         </p>
       )}
       <div className="settings-grid">
-        <form className="settings-card form-stack" onSubmit={connect}>
-          <h2>Connect SimpleFIN</h2>
-          <p>
-            Paste the setup token from SimpleFIN Bridge. PerkKeep claims it once
-            on the server and stores the resulting access address encrypted. It
-            is never shown again or sent to your browser.
-          </p>
-          <label>
-            SimpleFIN setup token
-            <textarea name="token" required rows={3} autoComplete="off" />
-          </label>
-          <label>
-            Label (optional)
-            <input name="label" maxLength={100} />
-          </label>
-          <button className="primary" disabled={!!busy || offline}>
-            <Link2 size={16} />{" "}
-            {busy === "connect" ? "Connecting…" : "Connect SimpleFIN"}
-          </button>
-        </form>
+        {linked.length > 0 && !replacing ? (
+          <div className="settings-card form-stack source-linked">
+            <div className="source-linked-heading">
+              <h2>SimpleFIN</h2>
+              <span
+                className={`badge ${linked.some((c) => c.last_error) ? "needs_review" : "confirmed"}`}
+              >
+                {linked.some((c) => c.last_error)
+                  ? "Needs attention"
+                  : "Linked"}
+              </span>
+            </div>
+            {linked.map((c) => (
+              <div key={c.id} className="form-stack">
+                <p>
+                  {c.label ? `${c.label} · ` : ""}
+                  {plural(
+                    data.accounts.filter((a) => a.connection_id === c.id)
+                      .length,
+                    "account",
+                  )}{" "}
+                  · last success {when(c.last_success_at)}. PerkKeep syncs once
+                  a day on its own; SimpleFIN refreshes banks about once a day.
+                </p>
+                {c.last_error && <p className="form-error">{c.last_error}</p>}
+                <SyncButton id={c.id} busy={busy} offline={offline} act={act} />
+              </div>
+            ))}
+            <button
+              className="text-button"
+              disabled={!!busy || offline}
+              onClick={() => setReplacing(true)}
+            >
+              Replace with a new setup token
+            </button>
+          </div>
+        ) : (
+          <form className="settings-card form-stack" onSubmit={connect}>
+            <h2>Connect SimpleFIN</h2>
+            <p>
+              Paste the setup token from SimpleFIN Bridge. PerkKeep claims it
+              once on the server and stores the resulting access address
+              encrypted. It is never shown again or sent to your browser.
+            </p>
+            <label>
+              SimpleFIN setup token
+              <textarea name="token" required rows={3} autoComplete="off" />
+            </label>
+            <label>
+              Label (optional)
+              <input name="label" maxLength={100} />
+            </label>
+            <button className="primary" disabled={!!busy || offline}>
+              <Link2 size={16} />{" "}
+              {busy === "connect" ? "Connecting…" : "Connect SimpleFIN"}
+            </button>
+            {replacing && (
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => setReplacing(false)}
+              >
+                Keep the current connection
+              </button>
+            )}
+          </form>
+        )}
         <CsvImport
           accounts={data.accounts.filter((a) => a.source === "csv")}
           busy={!!busy || offline}
@@ -130,41 +179,26 @@ export function SourcesPanel() {
           }
         />
       </div>
-      {data.connections.length > 0 && (
+      {data.connections.some((c) => !linked.includes(c)) && (
         <div className="sync-log">
-          {data.connections.map((c) => (
-            <div key={c.id}>
-              <div>
-                <strong>
-                  {c.source === "simplefin" ? "SimpleFIN" : "Plaid Sandbox"}
-                  {c.label ? ` · ${c.label}` : ""}
-                </strong>
-                <span>
-                  Last success {when(c.last_success_at)} · last attempt{" "}
-                  {when(c.last_attempted_at)}
-                </span>
-                {c.last_error && <p className="form-error">{c.last_error}</p>}
-                <p>
-                  SimpleFIN refreshes banks about once a day, so a sync shortly
-                  after another usually finds nothing new.
-                </p>
+          {data.connections
+            .filter((c) => !linked.includes(c))
+            .map((c) => (
+              <div key={c.id}>
+                <div>
+                  <strong>
+                    {c.source === "simplefin" ? "SimpleFIN" : "Plaid Sandbox"}
+                    {c.label ? ` · ${c.label}` : ""}
+                  </strong>
+                  <span>
+                    Last success {when(c.last_success_at)} · last attempt{" "}
+                    {when(c.last_attempted_at)}
+                  </span>
+                  {c.last_error && <p className="form-error">{c.last_error}</p>}
+                </div>
+                <SyncButton id={c.id} busy={busy} offline={offline} act={act} />
               </div>
-              <button
-                className="secondary"
-                disabled={!!busy || offline}
-                onClick={() =>
-                  void act(
-                    c.id,
-                    () => runSource("syncConnection", { connection_id: c.id }),
-                    "Sync finished.",
-                  )
-                }
-              >
-                <RefreshCw size={15} />{" "}
-                {busy === c.id ? "Syncing…" : "Sync now"}
-              </button>
-            </div>
-          ))}
+            ))}
         </div>
       )}
       {data.accounts.length ? (
@@ -181,11 +215,45 @@ export function SourcesPanel() {
         </div>
       ) : (
         <Empty title="No accounts yet.">
-          Connect SimpleFIN or import a statement CSV. Accounts appear here
-          unlinked until you confirm which card each one is.
+          Connect SimpleFIN or import a statement CSV. Synced card accounts
+          appear here, each linked to its card.
         </Empty>
       )}
     </section>
+  );
+}
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+function SyncButton({
+  id,
+  busy,
+  offline,
+  act,
+}: {
+  id: string;
+  busy: string;
+  offline: boolean;
+  act: (
+    label: string,
+    fn: () => Promise<unknown>,
+    done: string,
+  ) => Promise<void>;
+}) {
+  return (
+    <button
+      className="secondary"
+      disabled={!!busy || offline}
+      onClick={() =>
+        void act(
+          id,
+          () => runSource("syncConnection", { connection_id: id }),
+          "Sync finished.",
+        )
+      }
+    >
+      <RefreshCw size={15} /> {busy === id ? "Syncing…" : "Sync now"}
+    </button>
   );
 }
 
@@ -222,7 +290,7 @@ function AccountRow({
         </span>
         {a.last_error && <p className="form-error">{a.last_error}</p>}
         {a.mapping_status === "confirmed" && (
-          <p>Linked to {cardName(a.card_id)} (you confirmed this).</p>
+          <p>Linked to {cardName(a.card_id)}.</p>
         )}
         {a.mapping_status === "proposed" && (
           <p>
@@ -231,9 +299,7 @@ function AccountRow({
           </p>
         )}
         {a.mapping_status === "rejected" && (
-          <p>
-            You marked the suggestion as wrong. Choose the right card below.
-          </p>
+          <p>Unlinked. Choose the right card below.</p>
         )}
       </div>
       <div className="account-actions">
@@ -271,6 +337,21 @@ function AccountRow({
               Not this card
             </button>
           </>
+        )}
+        {a.mapping_status === "confirmed" && (
+          <button
+            className="text-button"
+            disabled={busy}
+            onClick={() =>
+              void act(
+                a.id,
+                () => runSource("rejectMapping", { account_id: a.id }),
+                "Account unlinked. It is no longer used for matching.",
+              )
+            }
+          >
+            Unlink
+          </button>
         )}
         {(a.mapping_status === "unmapped" ||
           a.mapping_status === "rejected") && (
