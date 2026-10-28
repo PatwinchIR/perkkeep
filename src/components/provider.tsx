@@ -61,6 +61,7 @@ const EMPTY: Snapshot = {
   audit: [],
   acknowledgements: [],
   settings: DEFAULT_SETTINGS,
+  pendingMigration: null,
   periodErrors: [],
 };
 const errorText = (e: unknown, fallback: string) =>

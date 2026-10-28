@@ -243,6 +243,26 @@ export async function addResearchedBenefits(tx: Tx, cardId: string) {
   return { added, skipped };
 }
 
+// Queries whose tables or columns may not exist yet in production, when code deploys ahead of
+// its migration. A missing relation, column or function rolls back to a savepoint and yields
+// null, so the rest of the snapshot still loads; the shell then shows which migration is pending.
+const MISSING_SCHEMA = new Set(["42P01", "42703", "42883"]);
+export async function optionalRows<T = Record<string, unknown>>(
+  tx: Tx,
+  sql: string,
+): Promise<T[] | null> {
+  await tx.query("savepoint optional_rows");
+  try {
+    const { rows } = await tx.query(sql);
+    await tx.query("release savepoint optional_rows");
+    return rows as T[];
+  } catch (e) {
+    if (!MISSING_SCHEMA.has((e as { code?: string }).code ?? "")) throw e;
+    await tx.query("rollback to savepoint optional_rows");
+    return null;
+  }
+}
+
 async function one<T>(tx: Tx, sql: string, values: unknown[]): Promise<T> {
   const { rows } = await tx.query(sql, values);
   if (rows.length !== 1)
@@ -544,15 +564,23 @@ export async function loadSnapshot(tx: Tx): Promise<Snapshot> {
   const cardArt = await tx.query(
     "select card_id, sha256, origin, bands, overlay, updated_at from public.card_art",
   );
-  const acknowledgements = await tx.query(
+  const acknowledgements = await optionalRows<
+    Snapshot["acknowledgements"][number]
+  >(
+    tx,
     "select alert_key, acknowledged_at from public.alert_acknowledgements order by acknowledged_at desc, id",
   );
-  const settings = await tx.query(
+  const settings = await optionalRows<Snapshot["settings"]>(
+    tx,
     "select alert_lead_days from public.user_settings",
   );
   return {
-    acknowledgements: acknowledgements.rows,
-    settings: settings.rows[0] ?? DEFAULT_SETTINGS,
+    acknowledgements: acknowledgements ?? [],
+    settings: settings?.[0] ?? DEFAULT_SETTINGS,
+    pendingMigration:
+      acknowledgements === null || settings === null
+        ? "0005_benefit_alerts.sql"
+        : null,
     cardArt: cardArt.rows,
     accounts: accounts.rows,
     connections: connections.rows,

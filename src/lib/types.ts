@@ -120,6 +120,8 @@ export type Snapshot = {
   audit: AuditEvent[];
   acknowledgements: Acknowledgement[];
   settings: UserSettings;
+  // Set when the deployed code is ahead of the database (see optionalRows in src/server/ledger.ts).
+  pendingMigration: string | null;
   periodErrors: string[];
 };
 export type { Json };

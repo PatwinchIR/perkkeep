@@ -10,6 +10,7 @@ import {
   recordEvidence,
   user,
 } from "./helpers";
+const { optionalRows } = await import("../src/server/ledger");
 let alice: Awaited<ReturnType<typeof user>>,
   bob: Awaited<ReturnType<typeof user>>;
 beforeAll(async () => {
@@ -616,5 +617,33 @@ describe("alerts, settings and partial-window allowances (migration 0004)", () =
         )
       ).map((a) => a.action),
     ).toEqual(["INSERT", "UPDATE"]);
+  });
+});
+
+describe("code ahead of its migration", () => {
+  it("loads the rest of the snapshot when a table is missing, and keeps the transaction usable", async () => {
+    const client = await appPool.connect();
+    try {
+      await client.query("begin");
+      await client.query("select set_config('app.owner_id',$1,true)", [
+        alice.id,
+      ]);
+      expect(
+        await optionalRows(
+          client,
+          "select 1 from public.synthetic_table_that_does_not_exist",
+        ),
+      ).toBeNull();
+      expect(await optionalRows(client, "select 1 as present")).toEqual([
+        { present: 1 },
+      ]);
+      const { rows } = await client.query(
+        "select count(*)::int as n from public.cards",
+      );
+      expect(typeof rows[0].n).toBe("number");
+      await client.query("rollback");
+    } finally {
+      client.release();
+    }
   });
 });

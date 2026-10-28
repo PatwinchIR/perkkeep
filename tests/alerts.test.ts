@@ -185,6 +185,7 @@ function snapshot(parts: Partial<Snapshot> = {}): Snapshot {
     audit: [],
     acknowledgements: [],
     settings: DEFAULT_SETTINGS,
+    pendingMigration: null,
     periodErrors: [],
     ...parts,
   };

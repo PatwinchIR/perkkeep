@@ -131,6 +131,14 @@ export function Shell({ children }: { children: ReactNode }) {
             .
           </div>
         )}
+        {data.pendingMigration && (
+          <div className="inline-warning" role="status">
+            Database migration {data.pendingMigration} has not been applied yet.
+            Alerts, progress and use entry work; dismissing alerts, alert
+            settings and allowance confirmation wait for it. Run{" "}
+            <code>npm run neon:migrate</code>.
+          </div>
+        )}
         <main id="main" tabIndex={-1}>
           {children}
         </main>
