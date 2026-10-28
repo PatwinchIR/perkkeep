@@ -2,7 +2,7 @@
 
 ## Status, October 28, 2026
 
-The Neon port is complete in code and verified against local PostgreSQL. It has not been deployed yet. See the [Phase 0 report](reports/phase-0.md).
+The Neon port on this branch is complete in code and verified against local PostgreSQL. Production (https://perkkeep.vercel.app) currently runs a parallel implementation from branch `claude/magical-hypatia-cpmayb`, whose schema lives in `neondb`. This branch deploys into its own `perkkeep` database, so switching production does not touch that data, and Vercel can promote the earlier deployment to roll back. See the [Phase 0 report](reports/phase-0.md).
 
 No paid upgrade or change to unrelated projects is authorized. Database connection strings, auth secrets and encryption keys stay in ignored local files or server environment variables. Never copy them into public source or into `NEXT_PUBLIC_` variables.
 
@@ -21,7 +21,7 @@ The Neon integration's own `DATABASE_URL` and `DATABASE_URL_UNPOOLED` are the ow
 
 ## Release steps
 
-1. `npm run neon:provision -- --vercel --owner-email <owner email>` on the owner's machine (reads `.local/neon.production.env` by variable name).
+1. `npm run neon:provision -- --database perkkeep --vercel --owner-email <owner email>` on the owner's machine (reads `.local/neon.production.env` by variable name). It creates the `perkkeep` database if needed and never alters `neondb`.
 2. Set `NEON_AUTH_BASE_URL` in Vercel if it is not already present. Turn on email verification in Neon Auth.
 3. Deploy (merge to `main`, or run `vercel deploy --prod`).
 4. Sign up with the owner email, verify it, and confirm the ledger opens. Sign out, and confirm a second browser cannot open it.

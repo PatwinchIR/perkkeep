@@ -27,7 +27,7 @@ const named = {
       .map((k) => [k, process.env[k]]),
   ),
 };
-const patterns = [/postgres(ql)?:\/\/[^\s"'`]+:[^\s"'`]+@/i, /sb_secret_/];
+const patterns = [/postgres(ql)?:\/\/[^\s"'`]+:[^\s"'`]+@/i];
 const findings = [];
 function check(dir) {
   for (const e of readdirSync(dir, { withFileTypes: true })) {

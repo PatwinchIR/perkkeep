@@ -47,21 +47,21 @@ As built (see [architecture](architecture.md)): Next.js 16 App Router PWA → fi
 
 ## 4. Decisions already made (do not re-open)
 
-| Topic                      | Decision                                                                                                                                                                                                                       |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Hosting                    | Vercel Hobby (project `perkkeep`) and Neon Free, already attached.                                                                                                                                                             |
-| Auth                       | Neon managed auth, server-side session verification, private owner access only.                                                                                                                                                |
-| Database access            | Restricted role with RLS and transaction-local identity. The owner role has `BYPASSRLS`; never serve user queries under it.                                                                                                    |
-| Primary transaction source | SimpleFIN Bridge, through a pluggable source adapter.                                                                                                                                                                          |
-| Backup source              | Plaid Trial (free, 10 lifetime Production Items). Sandbox only until the owner decides.                                                                                                                                        |
-| Excluded sources           | Era Context, ChatGPT Finances as a data source, any paid aggregator.                                                                                                                                                           |
-| History backfill           | CSV import: Copilot Money's format once a sample exists, issuer formats meanwhile.                                                                                                                                             |
-| AI matching                | Through PerkKeep's own MCP endpoint, called by Claude or ChatGPT. No server-side model API calls.                                                                                                                              |
-| AI authority               | AI proposes matches with recorded provenance. Only issuer credit evidence or owner confirmation changes a balance.                                                                                                             |
-| Point valuations           | Owner-configured, labeled as the owner's assumption everywhere. No built-in defaults.                                                                                                                                          |
-| Recommender                | Pure function over benefit rules, earn rates, remaining credits and valuation config; ranked list with reasons.                                                                                                                |
-| Local development          | The legacy local Supabase workflow was kept until the Neon path passed the same suite. It now passes, so Supabase is gone from runtime code and survives only as `legacy:supabase:*` scripts for reading the old local ledger. |
-| Repository                 | Public `main` on `github.com/PatwinchIR/perkkeep`. Push only reviewed branches based on public `main`.                                                                                                                         |
+| Topic                      | Decision                                                                                                                    |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Hosting                    | Vercel Hobby (project `perkkeep`) and Neon Free, already attached.                                                          |
+| Auth                       | Neon managed auth, server-side session verification, private owner access only.                                             |
+| Database access            | Restricted role with RLS and transaction-local identity. The owner role has `BYPASSRLS`; never serve user queries under it. |
+| Primary transaction source | SimpleFIN Bridge, through a pluggable source adapter.                                                                       |
+| Backup source              | Plaid Trial (free, 10 lifetime Production Items). Sandbox only until the owner decides.                                     |
+| Excluded sources           | Era Context, ChatGPT Finances as a data source, any paid aggregator.                                                        |
+| History backfill           | CSV import: Copilot Money's format once a sample exists, issuer formats meanwhile.                                          |
+| AI matching                | Through PerkKeep's own MCP endpoint, called by Claude or ChatGPT. No server-side model API calls.                           |
+| AI authority               | AI proposes matches with recorded provenance. Only issuer credit evidence or owner confirmation changes a balance.          |
+| Point valuations           | Owner-configured, labeled as the owner's assumption everywhere. No built-in defaults.                                       |
+| Recommender                | Pure function over benefit rules, earn rates, remaining credits and valuation config; ranked list with reasons.             |
+| Database                   | Neon PostgreSQL only (owner instruction, 2026-10-28). All Supabase code, scripts and dependencies were removed.             |
+| Repository                 | Public `main` on `github.com/PatwinchIR/perkkeep`. Push only reviewed branches based on public `main`.                      |
 
 ## 5. Data sources
 

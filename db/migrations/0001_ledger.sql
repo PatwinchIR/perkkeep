@@ -1,4 +1,4 @@
--- PerkKeep ledger for plain PostgreSQL (Neon). Ports supabase/migrations/2026102*.sql.
+-- PerkKeep ledger for PostgreSQL (Neon).
 -- Identity comes from a transaction-local setting (app.owner_id) that the server sets only after
 -- verifying the session. The migration owner (BYPASSRLS on Neon) never serves user queries; the
 -- application connects as perkkeep_app, which has no BYPASSRLS and owns nothing.

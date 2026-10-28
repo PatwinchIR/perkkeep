@@ -1,11 +1,18 @@
-import type { Database, Json } from "./database.types";
-export type Card = Database["public"]["Tables"]["cards"]["Row"];
-export type Benefit = Database["public"]["Tables"]["benefits"]["Row"];
-export type Evidence =
-  Database["public"]["Tables"]["redemption_evidence"]["Row"];
-export type SyncRun = Database["public"]["Tables"]["sync_runs"]["Row"];
-export type AuditEvent = Database["public"]["Tables"]["audit_events"]["Row"];
-export type Period = Database["public"]["Tables"]["benefit_periods"]["Row"] & {
+import type {
+  AuditEventRow,
+  BenefitRow,
+  CardRow,
+  EvidenceRow,
+  Json,
+  PeriodRow,
+  SyncRunRow,
+} from "./rows";
+export type Card = CardRow;
+export type Benefit = BenefitRow;
+export type Evidence = EvidenceRow;
+export type SyncRun = SyncRunRow;
+export type AuditEvent = AuditEventRow;
+export type Period = PeriodRow & {
   benefit_name: string;
   cadence: string;
   enrollment_required: boolean;

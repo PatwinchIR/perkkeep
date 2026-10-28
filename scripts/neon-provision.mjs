@@ -3,7 +3,7 @@
 // to .local/neon.app.env. With --vercel it also stores the server-only variables in the linked
 // Vercel project through the Vercel CLI (values go through stdin, never argv or logs).
 //
-//   node scripts/neon-provision.mjs [--env .local/neon.production.env] [--vercel] [--owner-email you@example.com]
+//   node scripts/neon-provision.mjs [--env .local/neon.production.env] [--database perkkeep] [--vercel] [--owner-email you@example.com]
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { spawnSync } from "node:child_process";
@@ -23,13 +23,39 @@ const env = Object.fromEntries(
     .filter(Boolean)
     .map((m) => [m[1], m[2]]),
 );
-const direct =
+let direct =
   env.DATABASE_URL_UNPOOLED ?? env.POSTGRES_URL_NON_POOLING ?? env.DATABASE_URL;
-const pooled = env.DATABASE_URL ?? env.POSTGRES_URL ?? direct;
+let pooled = env.DATABASE_URL ?? env.POSTGRES_URL ?? direct;
 if (!direct)
   throw new Error(
     `No owner connection variable found in ${envFile} (checked by name only).`,
   );
+
+// --database NAME keeps PerkKeep in its own database in the same Neon project, so an existing
+// database (and the Neon Auth tables in it) is never altered. It is created if missing.
+const database = option("--database");
+if (database) {
+  if (!/^[a-z][a-z0-9_]{0,62}$/.test(database))
+    throw new Error("--database must be a lowercase PostgreSQL identifier.");
+  const admin = new pg.Client({ connectionString: direct });
+  await admin.connect();
+  const exists = await admin.query(
+    "select 1 from pg_database where datname=$1",
+    [database],
+  );
+  if (!exists.rowCount) {
+    await admin.query(`create database ${database}`);
+    console.log(`Created database ${database}.`);
+  } else console.log(`Using existing database ${database}.`);
+  await admin.end();
+  const inDatabase = (url) => {
+    const u = new URL(url);
+    u.pathname = `/${database}`;
+    return u.toString();
+  };
+  direct = inDatabase(direct);
+  pooled = inDatabase(pooled);
+}
 
 // Migrations need a direct connection: session advisory locks do not survive transaction pooling.
 await migrate(direct);

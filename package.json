@@ -17,9 +17,7 @@
     "local:postgres": "node scripts/local-postgres.mjs",
     "db:migrate": "node scripts/db-migrate.mjs",
     "neon:provision": "node scripts/neon-provision.mjs",
-    "neon:inspect": "node scripts/neon-inspect.mjs",
-    "legacy:supabase:start": "supabase stack start --runtime native --eager",
-    "legacy:supabase:stop": "supabase stack stop"
+    "neon:inspect": "node scripts/neon-inspect.mjs"
   },
   "keywords": [],
   "author": "",
@@ -47,7 +45,6 @@
     "eslint": "9.39.5",
     "eslint-config-next": "16.4.3",
     "prettier": "3.9.10",
-    "supabase": "2.122.0",
     "tailwindcss": "4.3.3",
     "tsx": "4.23.15",
     "typescript": "6.0.3",

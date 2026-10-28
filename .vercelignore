@@ -1,0 +1,10 @@
+.env*
+!.env.example
+.local
+.vercel
+.next
+node_modules
+test-results
+playwright-report
+coverage
+scripts/cloud-postgres.sh

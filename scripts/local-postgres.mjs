@@ -39,7 +39,7 @@ const role = await client.query(
   "select 1 from pg_roles where rolname='perkkeep_local_owner'",
 );
 await client.query(
-  `${role.rowCount ? "alter" : "create"} role perkkeep_local_owner login bypassrls createrole nosuperuser password '${ownerPassword}'`,
+  `${role.rowCount ? "alter" : "create"} role perkkeep_local_owner login bypassrls createrole createdb nosuperuser password '${ownerPassword}'`,
 );
 for (const db of ["perkkeep_local", "perkkeep_test"]) {
   const exists = await client.query(
@@ -88,7 +88,7 @@ const keep = existsSync(".env.local")
       .filter(
         (l) =>
           l &&
-          !/^(PERKKEEP_DATABASE_URL|PERKKEEP_AUTH_PROVIDER|PERKKEEP_TEST_AUTH_SECRET|PERKKEEP_OWNER_EMAILS|PERKKEEP_ENCRYPTION_KEY)=/.test(
+          !/^(NEXT_PUBLIC_SUPABASE_[A-Z_]+|PERKKEEP_DATABASE_URL|PERKKEEP_AUTH_PROVIDER|PERKKEEP_TEST_AUTH_SECRET|PERKKEEP_OWNER_EMAILS|PERKKEEP_ENCRYPTION_KEY)=/.test(
             l,
           ),
       )

@@ -54,10 +54,6 @@ Database tests run as the restricted role against the local `perkkeep_test` data
 
 See [deployment](docs/deployment.md). In short: `npm run neon:provision -- --vercel --owner-email you@example.com` on the owner's machine applies the migrations to Neon, provisions the restricted role, and stores the server-only Vercel variables without printing them.
 
-## Legacy local Supabase ledger
-
-Earlier versions stored data in a local Supabase stack. That data is not migrated automatically. The stack can still be started with `npm run legacy:supabase:start` to read or export it. **Do not use database reset or destroy commands on a workspace containing records you want to keep.**
-
 ## Structure
 
 - `db/migrations/`: PostgreSQL schema, ownership policies, immutable snapshots, correction ledger, transactional reconciliation, audit triggers, append-only source transactions and private card art.
@@ -68,4 +64,3 @@ Earlier versions stored data in a local Supabase stack. That data is not migrate
 - `src/components/`: app shell, dashboard, cards, review, history, settings and forms.
 - `public/`: install icons and an offline reconnect page. No financial responses or authenticated pages are cached.
 - `tests/`: unit, database and browser tests.
-- `supabase/`: legacy local schema, kept to read the earlier local ledger.
