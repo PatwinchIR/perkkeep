@@ -89,6 +89,7 @@ test("records, corrects and rejects evidence with actual persistence and preserv
     { card, period } = await fixture(owner, "monthly", {}, localDate());
   await login(page, owner);
   await page.goto(`/cards/${card.id}`);
+  // The full form, for evidence with a source and an assessment.
   await page
     .getByRole("button", { name: "Confirm redemption", exact: true })
     .click();
@@ -102,7 +103,25 @@ test("records, corrects and rejects evidence with actual persistence and preserv
   await page.getByRole("button", { name: "Save evidence" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.reload();
-  await expect(page.locator(".period-amounts")).toContainText("$3");
+  await expect(page.locator(".benefit-row-amounts")).toContainText("$3");
+  await expect(page.locator(".progress-confirmed")).toHaveAttribute(
+    "style",
+    /width: 30%/,
+  );
+  // The quick entry on the row, for a partial use the owner already checked.
+  await page.getByLabel(/^Amount used for/).fill("2");
+  await page.getByRole("button", { name: "Mark used" }).click();
+  await expect(page.locator(".benefit-row-amounts")).toContainText("$5");
+  await expect(page.locator(".alert-item", { hasText: "Used $2" })).toHaveCount(
+    0,
+  );
+  await page.goto("/");
+  await expect(
+    page.locator(".alert-item", {
+      hasText: "Used $2: Synthetic test allowance",
+    }),
+  ).toBeVisible();
+  await page.goto(`/cards/${card.id}`);
   const candidate = await recordEvidence(owner, {
     benefit_period_id: period.id,
     source_type: "purchase",
@@ -114,7 +133,10 @@ test("records, corrects and rejects evidence with actual persistence and preserv
     notes: "Synthetic imported candidate",
   });
   await page.getByRole("button", { name: "Refresh records" }).click();
-  await page.getByRole("button", { name: /Evidence \(/ }).click();
+  await expect(page.locator(".benefit-row-hint")).toContainText(
+    "A purchase may qualify.",
+  );
+  await page.getByRole("button", { name: /^Show details for/ }).click();
   await page.getByRole("button", { name: "Review candidate" }).click();
   await page
     .getByLabel("What did you verify?")
@@ -124,12 +146,13 @@ test("records, corrects and rejects evidence with actual persistence and preserv
     .check();
   await page.getByRole("button", { name: "Save correction" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.locator(".period-amounts")).toContainText("$7");
+  await expect(page.locator(".benefit-row-amounts")).toContainText("$9");
+  await expect(page.locator(".period-amounts")).toContainText("$9");
   const rows = await owner.q(
     "select * from public.redemption_evidence where benefit_period_id=$1",
     [period.id],
   );
-  expect(rows).toHaveLength(3);
+  expect(rows).toHaveLength(4);
   expect(
     rows.find((e) => e.supersedes_evidence_id === candidate.id)?.confidence,
   ).toBe("confirmed");

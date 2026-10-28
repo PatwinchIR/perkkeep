@@ -98,3 +98,14 @@ These items are observations for a later change. They were left out to keep this
 - "Open a period for an earlier date" lives at the bottom of each card page. It is a history task and could also be reached from History.
 - Eyebrow text is typed in uppercase in the JSX. The `.eyebrow` role now applies `text-transform: uppercase`, so the source strings could be written in sentence case. Some screen readers spell out all-caps words letter by letter.
 - `--color-border-strong` reaches 1.56:1 against `--color-surface`. WCAG 2.1 success criterion 1.4.11 asks for 3:1 when a border is the only visual cue for a control. The previous input border had the same contrast, so this change does not regress it, but a darker control border would meet the criterion.
+
+## Benefit rows, progress bars and alerts (2026-10-28)
+
+Added with the Phase 2 alerts work (D44 to D46). All values reference tokens; no new literals were added outside `:root`.
+
+- `.cadence-group` and `.cadence-group-heading`: one section per reset timeframe with a count and totals in `--text-xs`.
+- `.benefit-row`: a three-column grid on desktop (title, progress, status and toggle) that collapses to two columns at 760px with the bar on its own line. The row title is an `h3` at `--text-sm`. Hints use the warning pair; coverage notes use `--color-text-muted`.
+- `.progress`: an 8px track. `.progress-confirmed` fills with `--color-accent`, `.progress-candidate` is a hatched gold stripe, `.progress-time` is a 2px tick at today. `.untrusted` greys the fill with `--color-icon-muted`; `.unknown` draws a hatched empty track.
+- `.benefit-row-quick`: the inline entry form. Inputs are `--text-md` so iOS does not zoom.
+- `.alert-item`: a left-bordered card in warning, danger, success, accent or neutral tone with an uppercase `.alert-kind` chip, text, and an action link plus an optional dismiss button.
+- `.nav-badge`: the attention count on the Review tab, drawn in `--color-warning-text` on `--color-on-accent`; on phones it sits in the corner of the tab.

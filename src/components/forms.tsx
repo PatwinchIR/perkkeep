@@ -4,7 +4,13 @@ import type { Card, Benefit, Period, Evidence, SyncRun } from "@/lib/types";
 import { run } from "@/lib/api";
 import type { OperationInput } from "@/server/ledger";
 import { CATALOG } from "@/lib/catalog";
-import { CADENCES, localDate, parseCents, cardEnding } from "@/lib/domain";
+import {
+  CADENCES,
+  localDate,
+  money,
+  parseCents,
+  cardEnding,
+} from "@/lib/domain";
 import { useApp } from "./provider";
 import { Dialog } from "./ui";
 function ErrorText({ error }: { error: string }) {
@@ -28,6 +34,16 @@ function integer(value: string) {
   if (!/^\d+$/.test(value) || Number(value) > 2147483647)
     throw new Error("Enter a whole number of units.");
   return Number(value);
+}
+// Idempotency reference for evidence the owner enters by hand.
+export async function manualReference(id: string) {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(`manual:${id}`),
+  );
+  return Array.from(new Uint8Array(digest))
+    .map((x) => x.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 export function CardForm({
@@ -157,21 +173,31 @@ export function CardForm({
 export function BenefitForm({
   card,
   previous,
+  templateId = "",
   onClose,
 }: {
   card: Card;
   previous?: Benefit;
+  // A rule file entry to prefill from, for a new benefit or for a new version after terms changed.
+  templateId?: string;
   onClose: () => void;
 }) {
   const { refresh, notice, offline } = useApp(),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
-    [template, setTemplate] = useState(""),
-    [cadence, setCadence] = useState(previous?.cadence ?? "monthly"),
-    [units, setUnits] = useState(
-      previous?.nominal_units !== null && previous?.nominal_units !== undefined,
+    [template, setTemplate] = useState(templateId),
+    initial = CATALOG.find((x) => x.id === templateId),
+    [cadence, setCadence] = useState(
+      initial?.cadence ?? previous?.cadence ?? "monthly",
     ),
-    [enroll, setEnroll] = useState(previous?.enrollment_required ?? false);
+    [units, setUnits] = useState(
+      !initial &&
+        previous?.nominal_units !== null &&
+        previous?.nominal_units !== undefined,
+    ),
+    [enroll, setEnroll] = useState(
+      initial?.enrollment ?? previous?.enrollment_required ?? false,
+    );
   const selected = CATALOG.find((x) => x.id === template),
     options = CATALOG.filter((x) => x.product === card.product_name);
   async function submit(e: FormEvent<HTMLFormElement>) {
@@ -217,7 +243,7 @@ export function BenefitForm({
           ...(selected
             ? {
                 catalog_rule_id: selected.id,
-                catalog_rule_version: selected.checkedAt,
+                catalog_rule_version: selected.version,
                 terms_verified: selected.verified,
               }
             : {}),
@@ -264,7 +290,7 @@ export function BenefitForm({
         Use current issuer terms. Your eligibility and enrollment are separate
         from the published allowance.
       </p>
-      {!previous && options.length > 0 && (
+      {options.length > 0 && (
         <label className="catalog-select">
           Start from a sourced rule
           <select
@@ -521,13 +547,7 @@ export function EvidenceForm({
         ? integer(text(f, "amount"))
         : parseCents(text(f, "amount"));
       const negative = ["refund", "reversal"].includes(source);
-      const digest = await crypto.subtle.digest(
-        "SHA-256",
-        new TextEncoder().encode(`manual:${id}`),
-      );
-      const reference = Array.from(new Uint8Array(digest))
-        .map((x) => x.toString(16).padStart(2, "0"))
-        .join("");
+      const reference = await manualReference(id);
       const p_record = {
         id,
         benefit_period_id: period.id,
@@ -667,6 +687,73 @@ export function EvidenceForm({
         <ErrorText error={error} />
         <button className="primary" disabled={busy || offline}>
           {busy ? "Saving…" : correction ? "Save correction" : "Save evidence"}
+        </button>
+      </form>
+    </Dialog>
+  );
+}
+
+// Confirms the allowance of a period that starts inside a partial rule window. Once, with a note,
+// never above the full allowance. Perkkeep does not prorate.
+export function AllowanceForm({
+  period,
+  onClose,
+}: {
+  period: Period;
+  onClose: () => void;
+}) {
+  const { refresh, notice, offline } = useApp(),
+    [error, setError] = useState(""),
+    [busy, setBusy] = useState(false);
+  const snap = period.rule_snapshot as Record<string, unknown>,
+    units = snap.nominal_units != null,
+    full = units
+      ? Number(snap.nominal_units)
+      : Number(snap.nominal_amount_cents);
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    setBusy(true);
+    setError("");
+    try {
+      const n = units
+        ? integer(text(f, "amount"))
+        : parseCents(text(f, "amount"));
+      await run("confirmPeriodAllowance", {
+        id: period.id,
+        amount_cents: units ? null : n,
+        units: units ? n : null,
+        note: text(f, "note"),
+      });
+      await refresh();
+      notice("Allowance confirmed for this window.");
+      onClose();
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Dialog title="Confirm this window’s allowance" onClose={onClose}>
+      <p className="dialog-intro">
+        {period.benefit_name}: this period starts inside new terms, so Perkkeep
+        did not assume an allowance. Enter what your issuer applies to this
+        window, up to the full{" "}
+        {units ? `${full} ${String(snap.unit_label ?? "units")}` : money(full)}.
+      </p>
+      <form className="form-stack" onSubmit={submit}>
+        <label>
+          {units ? "Allowance in units" : "Allowance in dollars"}
+          <input name="amount" inputMode="decimal" required />
+        </label>
+        <label>
+          How did you confirm it?
+          <textarea name="note" required rows={2} maxLength={4000} />
+        </label>
+        <ErrorText error={error} />
+        <button className="primary" disabled={busy || offline}>
+          {busy ? "Saving…" : "Save allowance"}
         </button>
       </form>
     </Dialog>

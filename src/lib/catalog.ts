@@ -58,6 +58,7 @@ export const ruleById = (id: string | null | undefined) =>
 // Shape used by the benefit form's template picker.
 export type CatalogRule = {
   id: string;
+  version: string;
   product: string;
   name: string;
   cadence: string;
@@ -74,6 +75,7 @@ export type CatalogRule = {
 export const CATALOG: CatalogRule[] = RULE_FILES.flatMap((f) =>
   f.rules.map((r) => ({
     id: r.id,
+    version: r.version,
     product: f.product,
     name: r.name,
     cadence: r.period,

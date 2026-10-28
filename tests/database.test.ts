@@ -487,3 +487,134 @@ describe("Ink card additions", () => {
     ).toEqual([card.id]);
   });
 });
+
+describe("alerts, settings and partial-window allowances (migration 0004)", () => {
+  it("keeps acknowledgements append-only and private, one row per key, with an audit entry", async () => {
+    const owner = await user();
+    await owner.q(
+      "insert into public.alert_acknowledgements(alert_key,context) values('expiring:synthetic','{}')",
+    );
+    await owner.q(
+      "insert into public.alert_acknowledgements(alert_key,context) values('expiring:synthetic','{}') on conflict(owner_user_id,alert_key) do nothing",
+    );
+    expect(
+      await owner.q("select * from public.alert_acknowledgements"),
+    ).toHaveLength(1);
+    await expect(
+      owner.q(
+        "insert into public.alert_acknowledgements(alert_key) values('expiring:synthetic')",
+      ),
+    ).rejects.toThrow();
+    await expect(
+      owner.q("update public.alert_acknowledgements set alert_key='x'"),
+    ).rejects.toThrow();
+    await expect(
+      owner.q("delete from public.alert_acknowledgements"),
+    ).rejects.toThrow();
+    expect(
+      await bob.q("select * from public.alert_acknowledgements"),
+    ).toHaveLength(0);
+    expect(
+      await anonymous().q("select * from public.alert_acknowledgements"),
+    ).toHaveLength(0);
+    expect(
+      await owner.q(
+        "select 1 from public.audit_events where entity_table='alert_acknowledgements'",
+      ),
+    ).toHaveLength(1);
+  });
+  it("stores alert settings per owner within bounds", async () => {
+    const owner = await user();
+    expect(await owner.q("select * from public.user_settings")).toHaveLength(0);
+    const upsert =
+      "insert into public.user_settings(alert_lead_days) values($1) on conflict(owner_user_id) do update set alert_lead_days=excluded.alert_lead_days returning alert_lead_days";
+    expect((await owner.one(upsert, [10])).alert_lead_days).toBe(10);
+    expect((await owner.one(upsert, [14])).alert_lead_days).toBe(14);
+    expect(await owner.q("select * from public.user_settings")).toHaveLength(1);
+    await expect(owner.q(upsert, [0])).rejects.toThrow();
+    expect(await bob.q("select * from public.user_settings")).toHaveLength(0);
+  });
+  it("lets the owner mark terms re-checked without a new version, never in the future, and clears it on versioning", async () => {
+    const { benefit } = await fixture(alice);
+    const b = await alice.one(
+      "update public.benefits set last_reverified_at=now() where id=$1 returning last_reverified_at",
+      [benefit.id],
+    );
+    expect(b.last_reverified_at).toBeTruthy();
+    await expect(
+      alice.q(
+        "update public.benefits set last_reverified_at=now()+interval '2 days' where id=$1",
+        [benefit.id],
+      ),
+    ).rejects.toThrow(/future/);
+    await expect(
+      alice.q(
+        "update public.benefits set nominal_amount_cents=2000 where id=$1",
+        [benefit.id],
+      ),
+    ).rejects.toThrow(/new benefit version/);
+    const next = await alice.one(
+      "select * from public.version_benefit($1,$2,$3)",
+      [
+        benefit.id,
+        JSON.stringify({ nominal_amount_cents: 2000 }),
+        "2026-11-01",
+      ],
+    );
+    expect(next.last_reverified_at).toBeNull();
+  });
+  it("confirms a partial-window allowance once, with a note, up to the full allowance, and nowhere else", async () => {
+    const { period: full } = await fixture(alice);
+    await expect(
+      alice.q(
+        "select public.confirm_period_allowance($1,500,null,'synthetic')",
+        [full.id],
+      ),
+    ).rejects.toThrow(/already established/);
+    const { period } = await fixture(alice, "monthly", {
+      effective_from: "2026-10-10",
+    });
+    expect(period.allowance_cents).toBeNull();
+    for (const [args, reason] of [
+      ["$1,500,null,''", /Explain/],
+      ["$1,1500,null,'synthetic'", /cannot exceed/],
+      ["$1,null,1,'synthetic'", /Use cents/],
+      ["$1,null,null,'synthetic'", /either/],
+    ] as const)
+      await expect(
+        alice.q(`select public.confirm_period_allowance(${args})`, [period.id]),
+      ).rejects.toThrow(reason);
+    await expect(
+      alice.q(
+        "update public.benefit_periods set allowance_cents=500 where id=$1",
+        [period.id],
+      ),
+    ).rejects.toThrow(/Explain/);
+    const confirmed = await alice.one(
+      "select * from public.confirm_period_allowance($1,1000,null,'Issuer applies the full credit this month')",
+      [period.id],
+    );
+    expect(confirmed.allowance_cents).toBe(1000);
+    expect(confirmed.notes).toContain("Allowance confirmed by owner");
+    expect(Number((await balance(period.id)).remaining_cents)).toBe(1000);
+    await expect(
+      alice.q("select public.confirm_period_allowance($1,900,null,'again')", [
+        period.id,
+      ]),
+    ).rejects.toThrow(/already established/);
+    await expect(
+      bob.q(
+        "select public.confirm_period_allowance($1,1000,null,'intrusion')",
+        [period.id],
+      ),
+    ).rejects.toThrow();
+    expect(
+      (
+        await alice.q(
+          "select action from public.audit_events where entity_id=$1 order by id",
+          [period.id],
+        )
+      ).map((a) => a.action),
+    ).toEqual(["INSERT", "UPDATE"]);
+  });
+});

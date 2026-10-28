@@ -2,8 +2,8 @@
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import {
-  ArrowRight,
   ArrowUpRight,
+  BellRing,
   CheckCheck,
   ClipboardCheck,
   Clock3,
@@ -12,9 +12,7 @@ import {
   ShieldCheck,
   Smartphone,
   LogOut,
-  SlidersHorizontal,
   UserRound,
-  WalletCards,
   WifiOff,
 } from "lucide-react";
 import { useApp } from "./provider";
@@ -22,6 +20,9 @@ import { run, runSource } from "@/lib/api";
 import { RULE_FILES } from "@/lib/catalog";
 import { CardTile, Empty, PageHeading } from "./ui";
 import { PeriodPanel } from "./period-panel";
+import { BenefitGroups } from "./benefit-row";
+import { AlertStack, useAlerts } from "./alerts";
+import { activity, attention } from "@/lib/alerts";
 import { BenefitForm, CardForm, CoverageForm } from "./forms";
 import { SourcesPanel } from "./sources";
 import { CardArtPanel } from "./card-art";
@@ -33,8 +34,6 @@ import {
   knownAvailable,
   localDate,
   money,
-  reviewReason,
-  shiftDays,
   sortReview,
   status,
 } from "@/lib/domain";
@@ -42,13 +41,13 @@ import type { Benefit } from "@/lib/types";
 
 export function Dashboard() {
   const { data, refresh, notice, offline } = useApp(),
+    alerts = useAlerts(),
     [issuer, setIssuer] = useState("all"),
     [cardFilter, setCardFilter] = useState("all"),
     [cadence, setCadence] = useState("all"),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
-  const today = localDate(),
-    current = data.periods.filter(
+  const current = data.periods.filter(
       (p) =>
         activePeriod(
           p,
@@ -74,16 +73,8 @@ export function Dashboard() {
   const monetary = eligible.filter((p) => p.allowance_cents !== null),
     used = monetary.reduce((n, p) => n + p.confirmed_cents, 0),
     candidates = monetary.reduce((n, p) => n + p.candidate_cents, 0);
-  const expiring = filtered
-      .filter(
-        (p) =>
-          p.period_end_exclusive <= shiftDays(today, 15) &&
-          (knownAvailable(p) ?? 0) > 0,
-      )
-      .sort(sortReview),
-    review = filtered.filter(
-      (p) => status(p) === "needs_review" || status(p) === "candidate",
-    );
+  const needs = attention(alerts),
+    recent = activity(alerts);
   const cards = data.cards.filter(
     (c) =>
       (issuer === "all" || c.issuer === issuer) &&
@@ -160,29 +151,28 @@ export function Dashboard() {
           <small>Purchases awaiting confirmation</small>
         </section>
       </div>
-      <div className="attention-strip">
-        <Link href="/review">
-          <Clock3 size={18} />
-          <strong>{expiring.length} expiring soon</strong>
-          <span>Next 14 days</span>
-          <ArrowRight size={16} />
-        </Link>
-        <Link href="/review">
-          <SlidersHorizontal size={18} />
-          <strong>
-            {review.length +
-              data.cards.filter((c) => !c.identity_verified_at).length}{" "}
-            need a closer look
-          </strong>
-          <span>Details or evidence to review</span>
-          <ArrowRight size={16} />
-        </Link>
-      </div>
       <div className="section-heading">
         <div>
-          <span className="eyebrow">THE EVERYDAY COLLECTION</span>
+          <span className="eyebrow">NEEDS ATTENTION</span>
           <h2>
-            Your cards <span className="count">{data.cards.length}</span>
+            Before anything else <span className="count">{needs.length}</span>
+          </h2>
+        </div>
+        <Link href="/review">
+          Review queue <ArrowUpRight size={15} />
+        </Link>
+      </div>
+      <AlertStack
+        alerts={needs}
+        limit={5}
+        moreHref="/review"
+        empty="Nothing needs your attention right now."
+      />
+      <div className="section-heading lower">
+        <div>
+          <span className="eyebrow">BY RESET WINDOW</span>
+          <h2>
+            Your benefits <span className="count">{filtered.length}</span>
           </h2>
         </div>
         <Link href="/cards">
@@ -234,6 +224,40 @@ export function Dashboard() {
           </select>
         </label>
       </div>
+      {filtered.length > 0 ? (
+        <BenefitGroups
+          periods={filtered}
+          benefits={data.benefits}
+          alerts={alerts}
+          showCard
+        />
+      ) : data.cards.length > 0 ? (
+        <div className="quiet-note">
+          <span className="metric-icon">
+            <Clock3 size={21} />
+          </span>
+          <div>
+            <strong>
+              {current.length
+                ? "No benefits in this view."
+                : "Your next opportunity starts with a verified benefit."}
+            </strong>
+            <p>
+              {current.length
+                ? "Try a different issuer, card or timeframe."
+                : "Open a card to confirm its details and add its researched benefits or your own from current issuer terms."}
+            </p>
+          </div>
+        </div>
+      ) : null}
+      <div className="section-heading lower">
+        <div>
+          <span className="eyebrow">THE EVERYDAY COLLECTION</span>
+          <h2>
+            Your cards <span className="count">{data.cards.length}</span>
+          </h2>
+        </div>
+      </div>
       {data.cards.length === 0 ? (
         <Empty
           title="Let’s get your cards together."
@@ -281,34 +305,21 @@ export function Dashboard() {
       )}
       <div className="section-heading lower">
         <div>
-          <span className="eyebrow">BEFORE THE WINDOW CLOSES</span>
-          <h2>Worth remembering</h2>
+          <span className="eyebrow">LAST 30 DAYS</span>
+          <h2>
+            Recent use <span className="count">{recent.length}</span>
+          </h2>
         </div>
-        <Link href="/review">
-          See review queue <ArrowUpRight size={15} />
+        <Link href="/history">
+          Full history <ArrowUpRight size={15} />
         </Link>
       </div>
-      {expiring.length ? (
-        expiring.slice(0, 3).map((p) => <PeriodPanel period={p} key={p.id} />)
-      ) : (
-        <div className="quiet-note">
-          <span className="metric-icon">
-            <Clock3 size={21} />
-          </span>
-          <div>
-            <strong>
-              {current.length
-                ? "Nothing verified to expire soon."
-                : "Your next opportunity starts with a verified benefit."}
-            </strong>
-            <p>
-              {current.length
-                ? "Only known, eligible balances appear here. Benefits with missing coverage stay in review."
-                : "Open a card to confirm its details and add a benefit from current issuer terms."}
-            </p>
-          </div>
-        </div>
-      )}
+      <AlertStack
+        alerts={recent}
+        limit={6}
+        moreHref="/history"
+        empty="No confirmed use recorded in the last 30 days. Confirmed statement credits and amounts you enter will appear here."
+      />
     </>
   );
 }
@@ -357,6 +368,7 @@ export function CardsScreen() {
 
 export function CardScreen({ id }: { id: string }) {
   const { data, refresh, notice, offline } = useApp(),
+    alerts = useAlerts(),
     [modal, setModal] = useState<"card" | "benefit" | null>(null),
     [previous, setPrevious] = useState<Benefit | undefined>(),
     [error, setError] = useState(""),
@@ -440,6 +452,61 @@ export function CardScreen({ id }: { id: string }) {
     }
     setBusy(false);
   }
+  async function recheck(b: Benefit) {
+    setBusy(true);
+    try {
+      await run("markReverified", { id: b.id });
+      await refresh();
+      notice("Terms marked as re-checked today.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save.");
+    }
+    setBusy(false);
+  }
+  const others = benefits.filter(
+    (b) => !periods.some((p) => p.benefit_id === b.id),
+  );
+  const ruleActions = (b: Benefit) => (
+    <>
+      <span>
+        Terms verified{" "}
+        {b.verified_at
+          ? new Date(b.verified_at).toLocaleDateString()
+          : "not yet"}
+        {b.last_reverified_at
+          ? ` · re-checked ${new Date(b.last_reverified_at).toLocaleDateString()}`
+          : ""}
+      </span>
+      {(!b.effective_to || b.effective_to > localDate()) && (
+        <>
+          <button
+            className="text-button"
+            disabled={offline || busy}
+            onClick={() => void recheck(b)}
+          >
+            Terms unchanged today
+          </button>
+          <button
+            className="text-button"
+            disabled={offline || busy}
+            onClick={() => {
+              setPrevious(b);
+              setModal("benefit");
+            }}
+          >
+            Update terms with a new version
+          </button>
+          <button
+            className="text-button"
+            disabled={offline || busy}
+            onClick={() => void pause(b)}
+          >
+            {b.enabled ? "Pause rule" : "Enable rule"}
+          </button>
+        </>
+      )}
+    </>
+  );
   return (
     <>
       <Link className="back-link" href="/cards">
@@ -476,7 +543,9 @@ export function CardScreen({ id }: { id: string }) {
         </div>
       )}
       <div className="section-heading">
-        <h2>Benefit periods</h2>
+        <h2>
+          Benefits <span className="count">{periods.length}</span>
+        </h2>
         <button
           className="primary"
           disabled={
@@ -518,65 +587,39 @@ export function CardScreen({ id }: { id: string }) {
           card’s name alone.
         </Empty>
       ) : (
-        Object.entries(CADENCES)
-          .filter(([key]) => benefits.some((b) => b.cadence === key))
-          .map(([key, label]) => (
-            <section key={key} className="cadence-section">
-              <h3 className="group-heading">{label}</h3>
-              {benefits
-                .filter((b) => b.cadence === key)
-                .map((b) => {
-                  const p = periods.find((p) => p.benefit_id === b.id);
-                  return (
-                    <div key={b.id}>
-                      {p ? (
-                        <PeriodPanel period={p} />
-                      ) : (
-                        <div className="rule-without-period">
-                          <strong>{b.name}</strong>
-                          <span>
-                            {!b.enabled
-                              ? "Paused"
-                              : b.effective_to && b.effective_to <= localDate()
-                                ? "Previous rule version"
-                                : "Period not established — check reset dates and eligibility"}
-                          </span>
-                        </div>
-                      )}
-                      <div className="rule-actions">
-                        <span>
-                          Terms verified{" "}
-                          {b.verified_at
-                            ? new Date(b.verified_at).toLocaleDateString()
-                            : "not yet"}
-                        </span>
-                        {(!b.effective_to || b.effective_to > localDate()) && (
-                          <>
-                            <button
-                              className="text-button"
-                              disabled={offline || busy}
-                              onClick={() => {
-                                setPrevious(b);
-                                setModal("benefit");
-                              }}
-                            >
-                              Update terms with a new version
-                            </button>
-                            <button
-                              className="text-button"
-                              disabled={offline || busy}
-                              onClick={() => void pause(b)}
-                            >
-                              {b.enabled ? "Pause rule" : "Enable rule"}
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+        <>
+          <BenefitGroups
+            periods={periods}
+            benefits={benefits}
+            alerts={alerts.filter((a) => a.cardId === id)}
+            actions={ruleActions}
+          />
+          {others.length > 0 && (
+            <section className="cadence-group">
+              <header className="cadence-group-heading">
+                <h2>
+                  Rules without a current period{" "}
+                  <span className="count">{others.length}</span>
+                </h2>
+              </header>
+              {others.map((b) => (
+                <div className="rule-without-period" key={b.id}>
+                  <strong>
+                    {b.name} · {CADENCES[b.cadence as keyof typeof CADENCES]}
+                  </strong>
+                  <span>
+                    {!b.enabled
+                      ? "Paused"
+                      : b.effective_to && b.effective_to <= localDate()
+                        ? "Previous rule version"
+                        : "Period not established — check reset dates and eligibility"}
+                  </span>
+                  <div className="rule-actions">{ruleActions(b)}</div>
+                </div>
+              ))}
             </section>
-          ))
+          )}
+        </>
       )}
       {benefits.some((b) => b.enabled) && (
         <details className="history-tool">
@@ -636,7 +679,8 @@ export function CardScreen({ id }: { id: string }) {
 
 export function ReviewScreen() {
   const { data } = useApp(),
-    today = localDate();
+    alerts = useAlerts(),
+    needs = attention(alerts);
   const periods = data.periods
     .filter(
       (p) =>
@@ -647,61 +691,44 @@ export function ReviewScreen() {
         p.enabled &&
         p.card_status === "active" &&
         p.eligibility_status !== "ineligible" &&
-        (status(p) === "candidate" ||
-          status(p) === "needs_review" ||
-          ((knownAvailable(p) ?? 0) > 0 &&
-            p.period_end_exclusive <= shiftDays(today, 15))),
+        (status(p) === "candidate" || status(p) === "needs_review"),
     )
     .sort(sortReview);
-  const unverified = data.cards.filter((c) => !c.identity_verified_at);
   return (
     <>
       <PageHeading
         eyebrow="A LITTLE ATTENTION GOES A LONG WAY"
         title="Your review queue."
-        description="Ordered by expiration, then known value. You make the final call."
+        description="Everything that needs a decision, ordered by urgency. You make the final call."
       />
+      <div className="section-heading">
+        <h2>
+          Needs attention <span className="count">{needs.length}</span>
+        </h2>
+      </div>
+      <AlertStack
+        alerts={needs}
+        empty="Nothing needs your attention right now."
+      />
+      <div className="section-heading lower">
+        <h2>
+          Benefits to review <span className="count">{periods.length}</span>
+        </h2>
+      </div>
       {periods.length ? (
-        periods.map((p) => (
-          <div key={p.id}>
-            <p className="queue-reason">{reviewReason(p)}</p>
-            <PeriodPanel period={p} initialOpen />
-          </div>
-        ))
+        <BenefitGroups
+          periods={periods}
+          benefits={data.benefits}
+          alerts={alerts}
+          showCard
+          initialOpen
+        />
       ) : (
         <Empty title="No benefit reviews waiting.">
           {data.benefits.length
-            ? "Verified opportunities and candidate evidence will show up here."
+            ? "Candidate evidence and unconfirmed details will show up here."
             : "Add verified benefit rules to begin. Missing data is never treated as an unused balance."}
         </Empty>
-      )}
-      {unverified.length > 0 && (
-        <section>
-          <div className="section-heading">
-            <h2>Confirm your starting details</h2>
-            <span className="count">{unverified.length}</span>
-          </div>
-          <div className="setup-list">
-            {unverified.map((c) => (
-              <Link href={`/cards/${c.id}`} key={c.id}>
-                <span className="metric-icon">
-                  <WalletCards size={18} />
-                </span>
-                <div>
-                  <strong>
-                    {c.display_name} · {cardEnding(c.last4)}
-                  </strong>
-                  <span>
-                    {c.product_name
-                      ? "Card identity not yet confirmed"
-                      : "Card product needs identification"}
-                  </span>
-                </div>
-                <ArrowUpRight size={18} />
-              </Link>
-            ))}
-          </div>
-        </section>
       )}
     </>
   );
@@ -1021,6 +1048,7 @@ export function SettingsScreen() {
               <p className="hint">Localhost is for testing on this computer.</p>
             </div>
           </div>
+          <AlertSettings />
           <div className="settings-row">
             <span className="metric-icon">
               <WifiOff size={18} />
@@ -1088,6 +1116,66 @@ function NameOnCards() {
           </label>
           <button className="secondary" disabled={busy || offline}>
             Save name
+          </button>
+        </form>
+        {error && (
+          <p role="alert" className="form-error">
+            {error}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Alert timing. Alerts themselves are derived from the ledger; only this preference is stored.
+function AlertSettings() {
+  const { data, refresh, notice, offline } = useApp(),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
+  async function save(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const days = Number(new FormData(e.currentTarget).get("lead"));
+    setBusy(true);
+    setError("");
+    try {
+      await run("updateSettings", { alert_lead_days: days });
+      await refresh();
+      notice(
+        `Ending-soon alerts now start ${days} days before a window closes.`,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="settings-row">
+      <span className="metric-icon">
+        <BellRing size={18} />
+      </span>
+      <div className="settings-row-text">
+        <h3>Alerts</h3>
+        <p>
+          Alerts are worked out from your ledger every time it loads: windows
+          ending soon, possible use to review, terms that changed, and use that
+          was confirmed. Dismissed alerts come back if the facts change.
+        </p>
+        <form className="form-row" onSubmit={save}>
+          <label>
+            Warn this many days before a window ends
+            <input
+              name="lead"
+              type="number"
+              min={1}
+              max={90}
+              required
+              defaultValue={data.settings.alert_lead_days}
+            />
+          </label>
+          <button className="secondary" disabled={busy || offline}>
+            Save
           </button>
         </form>
         {error && (

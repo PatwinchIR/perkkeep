@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { Snapshot } from "@/lib/types";
+import { DEFAULT_SETTINGS, type Snapshot } from "@/lib/types";
 import {
   ApiError,
   getSessionState,
@@ -49,6 +49,8 @@ const EMPTY: Snapshot = {
   evidence: [],
   runs: [],
   audit: [],
+  acknowledgements: [],
+  settings: DEFAULT_SETTINGS,
   periodErrors: [],
 };
 const errorText = (e: unknown, fallback: string) =>

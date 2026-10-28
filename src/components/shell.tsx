@@ -12,6 +12,8 @@ import {
   ArrowUpRight,
 } from "lucide-react";
 import { useApp } from "./provider";
+import { useAlerts } from "./alerts";
+import { attention } from "@/lib/alerts";
 import type { ReactNode } from "react";
 const nav = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
@@ -22,7 +24,8 @@ const nav = [
 ];
 export function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname(),
-    { busy, refresh, data, session } = useApp();
+    { busy, refresh, data, session } = useApp(),
+    needs = attention(useAlerts()).length;
   const latest = data.runs[0],
     lastSuccess = data.runs.find((r) => r.status === "success");
   return (
@@ -53,6 +56,12 @@ export function Shell({ children }: { children: ReactNode }) {
             >
               <Icon size={19} />
               {label}
+              {href === "/review" && needs > 0 && (
+                <span className="nav-badge">
+                  {needs}
+                  <span className="sr-only"> items need attention</span>
+                </span>
+              )}
             </Link>
           ))}
         </nav>

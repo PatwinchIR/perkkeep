@@ -12,6 +12,7 @@ Last updated: 2026-10-28. Update this file at the end of every working session.
 - **Hosted attempt (2026-10-28, second session):** the local suite passed in a fresh container, and the Vercel CLI works with a `VERCEL_TOKEN` environment variable. The container cannot reach Neon's Postgres port: a direct connection timed out, and the egress proxy accepted a tunnel to port 5432 but did not relay the Postgres protocol. So `neon:provision`, the production deployment and the synthetic end-to-end check were not run. Vercel production already holds `NEON_AUTH_BASE_URL` and `PERKKEEP_OWNER_EMAILS` (matching the owner's sign-in email). Details: [Phase 0 report](reports/phase-0.md).
 - **Open issue, deferred by the owner on 2026-10-28:** `npm test` fails intermittently in the cloud container. It reproduced once in 17 completed runs in the second session. The failing test was `tests/database.test.ts` > "rejects conflicting idempotency payloads, purchase confirmations and inference overrides" (1 failed, 47 passed). The owner asked to skip the investigation for now, so the root cause is still unknown. Do not dismiss it as flakiness when it is picked up again.
 - **Phase 2 (in progress):** rule files in `data/benefits` (Gold and Sapphire Reserve read on the issuers' pages on 2026-10-28; six products not yet researched), and a deterministic matcher that runs after each sync, import or link. Credit patterns are unverified until real statements confirm them (D36). Next: verify patterns on the first real sync, research the other six products, then the MCP endpoint with OAuth.
+- **Phase 2, alerts and progress (branch `claude/serene-lovelace-hhlh6k`, 2026-10-28):** migration `0004_benefit_alerts.sql` (append-only alert acknowledgements, alert settings, `last_reverified_at` on benefits, one-time allowance confirmation for partial rule windows); a pure alert and progress engine (`src/lib/alerts.ts`, D44); compact benefit rows grouped by reset timeframe with progress bars, inline "Mark used", one-click enrollment and eligibility confirmation, and the full record underneath (D45, D46); terms-drift alerts against the rule files with "Keep current terms", "Review and save a new version" and "Terms unchanged today" (D48); the review queue and overview built from alerts, and a count on the Review tab (D49). See [the Phase 2 report](reports/phase-2.md). Not built: push notifications, the MCP endpoint.
 - **Not run anywhere yet:** WebKit phone tests, the Plaid adapter against Plaid, issuer CSV layouts against real files, and anything against real Neon or Neon Auth.
 
 ## Next steps, in order
@@ -22,7 +23,7 @@ Last updated: 2026-10-28. Update this file at the end of every working session.
    - Make sure `NEON_AUTH_BASE_URL` exists in Vercel, and that Neon Auth requires email verification (Neon Console, Auth).
    - Deploy production (merge to `main` after review, or `vercel deploy --prod`). Verify with a synthetic, clearly labeled account: sign-up, email verification, sign-in, owner isolation, sign-out, session expiry, and the offline page. Then write the hosted results into `docs/reports/phase-0.md`.
 2. **Phase 1 gate.** The owner pastes the SimpleFIN token into Settings, confirms account links, and runs one sync. Check that statement credits appear for at least one issuer, then record the result in `docs/reports/phase-1.md`.
-3. **Phase 2:** benefit rule data files (`data/benefits/`), deterministic matchers, review queue, expiration alerts, the MCP endpoint with OAuth (requirements in [brief](brief.md) section 8), and AI proposals verified with Claude.
+3. **Phase 2:** done on synthetic data: rule files (`data/benefits/`), deterministic matchers, the review queue and in-app alerts. Still open: verify credit patterns on real statements, research the six remaining products, the MCP endpoint with OAuth (requirements in [brief](brief.md) section 8), and AI proposals verified with Claude. Then ask the owner whether the PWA answers the six questions in brief section 1 without a portal check.
 
 ## Working in a Claude Code cloud container
 
@@ -30,7 +31,7 @@ The container starts empty: no `.local/`, no database and no credentials.
 
 ```sh
 npm ci
-bash scripts/cloud-postgres.sh   # PostgreSQL 16 as the postgres user, port 54329, then local:postgres
+bash scripts/cloud-postgres.sh   # PostgreSQL 16 as the postgres user, port 54329, then local:postgres (applies every migration in db/migrations)
 npm test
 PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium npx playwright test --project=chromium-desktop --project=chromium-phone
 npm run typecheck && npm run lint && npm run build && npm run check:client
