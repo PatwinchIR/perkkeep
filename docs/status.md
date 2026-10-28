@@ -46,6 +46,6 @@ npm run typecheck && npm run lint && npm run build && npm run check:client
 
 ## Handoff rules
 
-- Read [brief](brief.md), [decisions](decisions.md) and this file before working.
+- Read [brief](brief.md), [decisions](decisions.md), [maintenance](maintenance.md) and this file before working.
 - After each push to the PR, check the Vercel commit status. Production builds fail closed when settings are missing; preview builds fail only on unsafe settings.
 - Before every commit, scan staged files for secrets and card digits. No identifier of a real account may enter the repository or its history.
