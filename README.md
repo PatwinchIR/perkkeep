@@ -23,6 +23,7 @@ See [architecture](docs/architecture.md), [deployment](docs/deployment.md), [rec
 1. Open the production URL and choose **First visit? Create the owner account**. Only addresses listed in `PERKKEEP_OWNER_EMAILS` can sign up. Verify your email, then sign in.
 2. Choose **Set up my cards**. This adds Amex Gold, Chase Sapphire Reserve, Freedom Flex, Freedom Unlimited, Prime Visa, Discover it, Ink Business Cash, Ink Business Preferred, and one unidentified Chase record. Identities start unverified, with no last-four digits and no assumed benefits.
 3. Open a card and confirm its product, status, issuer timezone and optional anniversary with the issuer.
+   Cards show the issuer's official product image for the confirmed product. For Discover, choose your design in card details. To stop tracking a card, use **Remove this card**: it leaves current views and totals and keeps its history; restore it from Settings.
 4. Add a benefit from a sourced catalog draft or your verified issuer terms. Confirm effective dates, eligibility and enrollment. A partial effective window has an unknown allowance instead of an invented prorated amount.
 5. Record candidate purchases or confirmed redemptions. Purchases cannot be marked issuer-confirmed. Refunds or reversals reduce usage only when an entitlement reversal is explicitly verified.
 6. In Settings, record the periods and coverage of a manual reconciliation, or exchange a structured reconciliation with a transaction reviewer. Only eligible monetary benefits with recent complete coverage enter **Known available**.

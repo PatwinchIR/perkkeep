@@ -35,6 +35,13 @@
 - An earlier local Neon-mode production server returned 401/403/404 for the same anonymous, cross-origin and blocked-path cases.
 - Before the Supabase removal, the existing 29 Supabase database and domain tests passed against a native local Supabase stack after the backend refactor. Browser tests were not run there, because the preinstalled Chromium build did not match Playwright's expected revision.
 
+### Card faces and card removal (follow-up)
+
+- The new migration (`cards.archived_at`, `cards.art_design`, and no new periods for removed cards) applied to production Neon.
+- Ledger tests rose to 29. The new ones cover archive and restore (owner-only, history and evidence kept, new periods refused while removed, audit entries) and validated design choices. All 29 ledger and 7 domain tests pass.
+- All nine official image URLs (Chase, American Express, and Discover through Capital One) return 200 through the production image optimizer. A URL outside the allow-list returns 400.
+- On the live site, with the two API responses replaced by a synthetic snapshot from the local test database, card tiles, the selected Discover design, the remove dialog and the Settings list of removed cards rendered correctly at 375 px and 1300 px with no horizontal overflow. This checks layout only, not authenticated data flow.
+
 ### Configuration changes made
 
 - Vercel production environment: added `PERKKEEP_OWNER_EMAILS` (the owner's address) and `PERKKEEP_OWNER_PLUS_ALIASES=allow`.
