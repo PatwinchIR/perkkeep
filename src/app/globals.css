@@ -35,42 +35,42 @@
   --tracking-caps: 0.08em;
 
   /* Neutrals */
-  --color-bg: #f6f5f1;
-  --color-surface: #fffefa;
-  --color-surface-muted: #eff0e9;
-  --color-surface-hover: #e7ece1;
-  --color-surface-selected: #dfe7d8;
-  --color-border: #e1e4dc;
-  --color-border-strong: #c9d1c0;
+  --color-bg: #ffffff;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f4f6f9;
+  --color-surface-hover: #edf2f8;
+  --color-surface-selected: #e2edf9;
+  --color-border: #e1e6ed;
+  --color-border-strong: #c2ccd8;
 
   /* Text */
-  --color-text: #26372e;
-  --color-text-muted: #586454;
-  --color-icon-muted: #7d8a74;
+  --color-text: #13253d;
+  --color-text-muted: #55647a;
+  --color-icon-muted: #76849a;
 
   /* Brand */
-  --color-accent: #344e3f;
-  --color-accent-hover: #233c2e;
-  --color-accent-soft: #e5ecd9;
+  --color-accent: #0b5cad;
+  --color-accent-hover: #084a8c;
+  --color-accent-soft: #e3edf9;
   --color-on-accent: #ffffff;
-  --color-on-accent-muted: #d5dfce;
-  --color-gold: #af8650;
-  --color-focus: #a68144;
+  --color-on-accent-muted: #c8dbf1;
+  --color-gold: #946319;
+  --color-focus: #117aca;
 
   /* Status: each background pairs with its text color at 5:1 or better. */
-  --color-success-bg: #e8efdf;
-  --color-success-text: #48663a;
-  --color-warning-bg: #f4ecda;
-  --color-warning-border: #e2cfa6;
-  --color-warning-text: #6b5524;
-  --color-danger-bg: #f8e2dc;
-  --color-danger-text: #8c3c33;
-  --color-danger: #9f4540;
-  --color-neutral-bg: #eeede9;
+  --color-success-bg: #e4f3ea;
+  --color-success-text: #1c6841;
+  --color-warning-bg: #fdf3e1;
+  --color-warning-border: #efd8a6;
+  --color-warning-text: #77520f;
+  --color-danger-bg: #fce8e6;
+  --color-danger-text: #a02f2a;
+  --color-danger: #b3352f;
+  --color-neutral-bg: #f1f3f6;
 
   /* Card art. Faces set --face-a and --face-b inline from src/lib/card-faces.ts. */
-  --card-face-a: #4a5a55;
-  --card-face-b: #2f3d39;
+  --card-face-a: #3a5a84;
+  --card-face-b: #1c3354;
   --card-gold: linear-gradient(125deg, #d0ba84, #baa071);
   --card-gold-text: #332c1f;
   --card-ring: #ffffff14;
@@ -78,10 +78,10 @@
   --emboss-font: "OCR A Std", "Courier New", monospace;
   --emboss-shadow: 0 1px 1px #00000038;
 
-  --color-overlay: #17281d66;
-  --shadow-control: 0 1px 2px #26372e1a;
-  --shadow-raised: 0 6px 30px #26372e25;
-  --shadow-overlay: 0 20px 100px #26372e38;
+  --color-overlay: #0b1a2e66;
+  --shadow-control: 0 1px 2px #13253d14;
+  --shadow-raised: 0 6px 30px #13253d1f;
+  --shadow-overlay: 0 20px 100px #13253d33;
 
   --radius-sm: 6px;
   --radius-md: 8px;
