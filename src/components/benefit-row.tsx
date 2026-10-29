@@ -1,33 +1,55 @@
 "use client";
-import { useState, type FormEvent, type ReactNode } from "react";
+import {
+  useId,
+  useState,
+  useSyncExternalStore,
+  type CSSProperties,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import Link from "next/link";
-import { Check, ChevronDown } from "lucide-react";
-import type { Benefit, Period } from "@/lib/types";
+import { Check, ChevronRight, ExternalLink } from "lucide-react";
+import type { Benefit, Card, Evidence, Period } from "@/lib/types";
 import { run } from "@/lib/api";
 import type { OperationInput } from "@/server/ledger";
 import {
-  formatAmount,
-  groupByCadence,
   isUnits,
+  liveEvidence,
   progress,
   type Alert,
   type Progress,
 } from "@/lib/alerts";
 import {
-  cardEnding,
-  coverageFresh,
+  amountText,
+  endsLabel,
+  enrollmentUnknown,
+  figures,
+  lastDay,
+  membershipStatus,
+  membershipThrough,
+  ROW_STATUS_LABELS,
+  rowStatus,
+  shortDate,
+  type RowStatus,
+} from "@/lib/benefit-status";
+import {
+  accountFreshness,
+  CADENCES,
   dateLabel,
   localDate,
   money,
   parseCents,
-  periodLabel,
   shiftDays,
-  status,
 } from "@/lib/domain";
+import { faceFor } from "@/lib/card-faces";
 import { useApp } from "./provider";
-import { Badge } from "./ui";
-import { PeriodPanel } from "./period-panel";
-import { AllowanceForm, EvidenceForm, manualReference } from "./forms";
+import {
+  AllowanceForm,
+  BenefitForm,
+  EvidenceForm,
+  NoteForm,
+  manualReference,
+} from "./forms";
 
 const errorText = (e: unknown) =>
   e instanceof Error ? e.message : "Could not save.";
@@ -37,9 +59,22 @@ function integer(value: string) {
   return Number(value);
 }
 
-// One compact line per benefit window: name, time left, a bar of confirmed (solid) and possible
-// (hatched) use against the allowance with a tick at today, the amounts, status, and the one
-// action the row needs. Details and the evidence ledger open underneath.
+// The web layout is master-detail at 900px and wider (rule 13); narrower, rows expand in place.
+const WIDE = "(min-width: 900px)";
+export function useWide() {
+  return useSyncExternalStore(
+    (notify) => {
+      const m = window.matchMedia(WIDE);
+      m.addEventListener("change", notify);
+      return () => m.removeEventListener("change", notify);
+    },
+    () => window.matchMedia(WIDE).matches,
+    () => false,
+  );
+}
+
+// A thin bar of confirmed (solid) and possible (hatched) use against the allowance, with a tick
+// at today.
 export function ProgressBar({ pr, label }: { pr: Progress; label: string }) {
   if (pr.allowance === null)
     return (
@@ -71,33 +106,308 @@ export function ProgressBar({ pr, label }: { pr: Progress; label: string }) {
   );
 }
 
-export function BenefitRow({
-  period,
-  benefit,
+export function CardChip({ card }: { card?: Card }) {
+  if (!card) return null;
+  return (
+    <span
+      className="card-chip"
+      aria-hidden="true"
+      style={{ "--chip": faceFor(card).placeholder[0] } as CSSProperties}
+    />
+  );
+}
+
+export type Selection = { kind: "period" | "membership"; id: string } | null;
+export type ListSection = {
+  key: string;
+  title: string;
+  summary?: ReactNode;
+  rows: Period[];
+  // Rows that collapse into one line at the end of the section ("Done this period (n)").
+  folds?: { key: string; label: string; rows: Period[] }[];
+};
+
+// The benefits list shared by Home and the card page: one line per benefit, collapsed by default,
+// and one selected benefit at a time. On a phone the selected row expands in place; at 900px and
+// wider its detail opens in the right pane instead.
+export function BenefitList({
+  sections,
+  memberships = [],
   showCard = false,
-  initialOpen = false,
-  termsAlert,
-  actions,
+  alerts = [],
+  ruleActions,
+  empty,
+}: {
+  sections: ListSection[];
+  memberships?: Benefit[];
+  showCard?: boolean;
+  alerts?: Alert[];
+  ruleActions?: (b: Benefit) => ReactNode;
+  empty?: ReactNode;
+}) {
+  const { data } = useApp(),
+    wide = useWide(),
+    [selected, setSelected] = useState<Selection>(null);
+  const toggle = (s: NonNullable<Selection>) =>
+    setSelected((cur) => (cur?.id === s.id ? null : s));
+  const period =
+    selected?.kind === "period"
+      ? sections
+          .flatMap((s) => [
+            ...s.rows,
+            ...(s.folds ?? []).flatMap((f) => f.rows),
+          ])
+          .find((p) => p.id === selected.id)
+      : undefined;
+  const membership =
+    selected?.kind === "membership"
+      ? memberships.find((b) => b.id === selected.id)
+      : undefined;
+  const detail = (p?: Period, m?: Benefit) =>
+    p ? (
+      <BenefitDetail
+        period={p}
+        benefit={data.benefits.find((b) => b.id === p.benefit_id)}
+        termsAlert={alerts.find(
+          (a) => a.kind === "terms_changed" && a.benefitId === p.benefit_id,
+        )}
+        ruleActions={ruleActions}
+        wide={wide}
+      />
+    ) : m ? (
+      <MembershipDetail benefit={m} ruleActions={ruleActions} wide={wide} />
+    ) : null;
+  const line = (p: Period) => (
+    <BenefitLine
+      key={p.id}
+      period={p}
+      card={data.cards.find((c) => c.id === p.card_id)}
+      showCard={showCard}
+      open={selected?.id === p.id}
+      onToggle={() => toggle({ kind: "period", id: p.id })}
+    >
+      {!wide && selected?.id === p.id && detail(p)}
+    </BenefitLine>
+  );
+  const list = (
+    <div className="benefit-list-rows">
+      {sections.length === 0 && memberships.length === 0 && empty}
+      {sections.map((s) => (
+        <section key={s.key} className="benefit-section" aria-label={s.title}>
+          <header className="benefit-section-heading">
+            <h2>
+              {s.title} <span className="count">{s.rows.length}</span>
+            </h2>
+            {s.summary && (
+              <span className="benefit-section-summary">{s.summary}</span>
+            )}
+          </header>
+          <ul className="benefit-lines">
+            {s.rows.map(line)}
+            {(s.folds ?? [])
+              .filter((f) => f.rows.length)
+              .map((f) => (
+                <Fold key={f.key} label={`${f.label} (${f.rows.length})`}>
+                  {f.rows.map(line)}
+                </Fold>
+              ))}
+          </ul>
+        </section>
+      ))}
+      {memberships.length > 0 && (
+        <section
+          className="benefit-section"
+          aria-label="Memberships and status"
+        >
+          <header className="benefit-section-heading">
+            <h2>
+              Memberships and status{" "}
+              <span className="count">{memberships.length}</span>
+            </h2>
+            <span className="benefit-section-summary">
+              nothing to spend down
+            </span>
+          </header>
+          <ul className="benefit-lines">
+            <Fold label={memberships.map((b) => shortName(b.name)).join(", ")}>
+              {memberships.map((b) => (
+                <MembershipLine
+                  key={b.id}
+                  benefit={b}
+                  open={selected?.id === b.id}
+                  onToggle={() => toggle({ kind: "membership", id: b.id })}
+                >
+                  {!wide && selected?.id === b.id && detail(undefined, b)}
+                </MembershipLine>
+              ))}
+            </Fold>
+          </ul>
+        </section>
+      )}
+    </div>
+  );
+  if (!wide) return <div className="benefit-list">{list}</div>;
+  return (
+    <div className="benefit-list split">
+      {list}
+      <aside className="detail-pane" aria-label="Selected benefit">
+        {detail(period, membership) ?? (
+          <p className="detail-placeholder">
+            Select a benefit to see its dates, evidence and what you can do with
+            it.
+          </p>
+        )}
+      </aside>
+    </div>
+  );
+}
+
+// Product names carry their issuer framing ("Complimentary …", "($75,000 spend tier)"); the
+// collapsed memberships line lists them short.
+function shortName(name: string) {
+  return name
+    .replace(/^Complimentary\s+/i, "")
+    .replace(/\s*\(.*\)\s*$/, "")
+    .replace(/\s+(membership|subscriptions?)$/i, "")
+    .replace(/^./, (c) => c.toUpperCase());
+}
+
+function Fold({ label, children }: { label: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false),
+    id = useId();
+  return (
+    <li className="benefit-fold">
+      <button
+        type="button"
+        className="benefit-fold-button"
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={() => setOpen(!open)}
+      >
+        <span>{label}</span>
+        <ChevronRight size={16} aria-hidden="true" />
+      </button>
+      {open && (
+        <ul className="benefit-lines" id={id}>
+          {children}
+        </ul>
+      )}
+    </li>
+  );
+}
+
+function BenefitLine({
+  period,
+  card,
+  showCard,
+  open,
+  onToggle,
+  children,
 }: {
   period: Period;
-  benefit?: Benefit;
-  showCard?: boolean;
-  initialOpen?: boolean;
-  termsAlert?: Alert;
-  actions?: ReactNode;
+  card?: Card;
+  showCard: boolean;
+  open: boolean;
+  onToggle: () => void;
+  children?: ReactNode;
 }) {
-  const { refresh, notice, offline } = useApp(),
-    [open, setOpen] = useState(initialOpen),
-    [modal, setModal] = useState<"evidence" | "allowance" | null>(null),
+  const now = new Date(),
+    s = rowStatus(period, now),
+    pr = progress(period, now),
+    today = localDate(now, period.issuer_timezone),
+    ends = endsLabel(lastDay(period), today),
+    id = useId();
+  const quiet = s === "used" || s === "not_enrolled";
+  return (
+    <li className={`benefit-line ${s}${open ? " open" : ""}`}>
+      <button
+        type="button"
+        className="benefit-line-button"
+        aria-expanded={open}
+        aria-controls={children ? id : undefined}
+        onClick={onToggle}
+      >
+        {showCard && <CardChip card={card} />}
+        <span className="benefit-line-name">
+          {period.benefit_name}
+          {showCard && (
+            <span className="benefit-line-card"> · {period.card_name}</span>
+          )}
+        </span>
+        {s === "review" && <span className="badge review">Review</span>}
+        <span className="benefit-line-amount">
+          {s === "used" && <span className="benefit-line-status">Used · </span>}
+          {amountText(period, s)}
+          {s === "unknown" && <span className="sr-only"> (unknown)</span>}
+        </span>
+        {!quiet && (
+          <span className="benefit-line-ends">
+            {ends === "today" ? "ends today" : ends}
+          </span>
+        )}
+      </button>
+      {!quiet && pr.allowance !== null && (
+        <ProgressBar
+          pr={pr}
+          label={`${ROW_STATUS_LABELS[s]}: ${amountText(period, s)}, ends ${ends}`}
+        />
+      )}
+      {children && (
+        <div className="benefit-line-detail" id={id}>
+          {children}
+        </div>
+      )}
+    </li>
+  );
+}
+
+function MembershipLine({
+  benefit,
+  open,
+  onToggle,
+  children,
+}: {
+  benefit: Benefit;
+  open: boolean;
+  onToggle: () => void;
+  children?: ReactNode;
+}) {
+  const { data } = useApp(),
+    card = data.cards.find((c) => c.id === benefit.card_id),
+    today = localDate(new Date(), card?.issuer_timezone),
+    s = membershipStatus(benefit, today),
+    through = membershipThrough(benefit),
+    id = useId();
+  return (
+    <li className={`benefit-line membership ${s}${open ? " open" : ""}`}>
+      <button
+        type="button"
+        className="benefit-line-button"
+        aria-expanded={open}
+        aria-controls={children ? id : undefined}
+        onClick={onToggle}
+      >
+        <span className="benefit-line-name">{benefit.name}</span>
+        <span className="benefit-line-amount">{ROW_STATUS_LABELS[s]}</span>
+        {s === "active" && through && (
+          <span className="benefit-line-ends">
+            through {shortDate(through, true)}
+          </span>
+        )}
+      </button>
+      {children && (
+        <div className="benefit-line-detail" id={id}>
+          {children}
+        </div>
+      )}
+    </li>
+  );
+}
+
+function useAct() {
+  const { refresh, notice } = useApp(),
     [busy, setBusy] = useState(""),
     [error, setError] = useState("");
-  const now = new Date(),
-    pr = progress(period, now),
-    s = status(period, now),
-    units = isUnits(period),
-    today = localDate(now, period.issuer_timezone),
-    expired = s === "expired",
-    amount = (n: number | null) => formatAmount(period, n);
   async function act(label: string, fn: () => Promise<unknown>, done: string) {
     setBusy(label);
     setError("");
@@ -105,19 +415,138 @@ export function BenefitRow({
       await fn();
       await refresh();
       notice(done);
+      return true;
     } catch (e) {
       setError(errorText(e));
+      return false;
     } finally {
       setBusy("");
     }
   }
-  async function quick(e: FormEvent<HTMLFormElement>) {
+  return { busy, error, setError, act };
+}
+
+function EvidenceList({
+  period,
+  evidence,
+  onCorrect,
+}: {
+  period: Period;
+  evidence: Evidence[];
+  onCorrect?: (e: Evidence) => void;
+}) {
+  const units = isUnits(period),
+    amount = (e: Evidence) =>
+      units
+        ? `${e.units ?? 0} ${String((period.rule_snapshot as Record<string, unknown>)?.unit_label ?? "units")}`
+        : money(e.amount_cents ?? 0);
+  if (!evidence.length)
+    return (
+      <p className="benefit-detail-muted">
+        Evidence: none this period. Missing evidence does not mean unused.
+      </p>
+    );
+  return (
+    <div className="benefit-evidence">
+      <span className="eyebrow">Evidence</span>
+      <ul>
+        {evidence.map((e) => (
+          <li key={e.id}>
+            <span>
+              {e.merchant ?? e.source_type.replaceAll("_", " ")} ·{" "}
+              {shortDate(e.transaction_date)}
+            </span>
+            <span className="num">{amount(e)}</span>
+            {e.confidence === "candidate" ? (
+              <Link href="/review" className="waiting-link">
+                Waiting on you ›
+              </Link>
+            ) : (
+              <span className="benefit-detail-muted">
+                {e.confidence === "confirmed"
+                  ? e.recorded_by === "user"
+                    ? "entered by you"
+                    : "from your statement"
+                  : e.confidence}
+              </span>
+            )}
+            {onCorrect && e.confidence === "confirmed" && (
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => onCorrect(e)}
+              >
+                Correct
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// What a selected allowance row holds (rule 5): its dates and terms, its evidence, the Mark used
+// form when something is left, and the enrollment toggle. A Used or Not enrolled row asks for
+// nothing (rule 12): it shows its evidence and one way back.
+export function BenefitDetail({
+  period,
+  benefit,
+  termsAlert,
+  ruleActions,
+  wide,
+}: {
+  period: Period;
+  benefit?: Benefit;
+  termsAlert?: Alert;
+  ruleActions?: (b: Benefit) => ReactNode;
+  wide: boolean;
+}) {
+  const { data, offline } = useApp(),
+    { busy, error, setError, act } = useAct(),
+    [modal, setModal] = useState<
+      "evidence" | "allowance" | "note" | "terms" | null
+    >(null),
+    [correction, setCorrection] = useState<Evidence | undefined>();
+  const now = new Date(),
+    s: RowStatus = rowStatus(period, now),
+    f = figures(period),
+    units = isUnits(period),
+    unitLabel = String(
+      (period.rule_snapshot as Record<string, unknown>)?.unit_label ?? "units",
+    ),
+    today = localDate(now, period.issuer_timezone),
+    snap = period.rule_snapshot as Record<string, unknown>,
+    live = liveEvidence(
+      data.evidence.filter((e) => e.benefit_period_id === period.id),
+    ).filter((e) => e.confidence !== "rejected"),
+    amount = (n: number | null) =>
+      n === null ? "Unknown" : units ? `${n} ${unitLabel}` : money(n),
+    card = data.cards.find((c) => c.id === period.card_id),
+    pr = progress(period, now);
+  const enrollment = benefit?.enrollment_required
+    ? benefit.enrollment_status
+    : null;
+  async function setEnrolled(enrolled: boolean) {
+    await act(
+      "enroll",
+      () =>
+        run("saveEnrollment", {
+          card_id: period.card_id,
+          answers: [{ id: period.benefit_id, enrolled }],
+        }),
+      enrolled
+        ? "Marked enrolled. It shows up and alerts again."
+        : "Marked not enrolled. It stops alerting; you can change this here.",
+    );
+  }
+  async function markUsed(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = e.currentTarget,
-      f = new FormData(form),
-      raw = String(f.get("amount") ?? "").trim(),
-      date = String(f.get("date") ?? today),
-      note = String(f.get("note") ?? "").trim();
+      fd = new FormData(form),
+      raw = String(fd.get("amount") ?? "").trim(),
+      date = String(fd.get("date") ?? today),
+      note = String(fd.get("note") ?? "").trim();
     try {
       const n = units ? integer(raw) : parseCents(raw);
       if (n <= 0) throw new Error("Enter the amount you used.");
@@ -142,212 +571,171 @@ export function BenefitRow({
         () => run("recordEvidence", record),
         `${amount(n)} recorded as used. Earlier records stay in history.`,
       );
-      form.reset();
     } catch (err) {
       setError(errorText(err));
     }
   }
-  const needsIdentity = !period.identity_verified_at,
-    needsEligibility = period.eligibility_status !== "eligible",
-    needsEnrollment =
-      period.enrollment_required && period.enrollment_status !== "active",
-    needsAllowance = pr.allowance === null && pr.partialWindow,
-    hasCandidate = pr.candidate > 0,
-    fresh = coverageFresh(period, now),
-    quickable =
-      !expired &&
-      !needsIdentity &&
-      !needsEligibility &&
-      !needsEnrollment &&
-      period.enabled;
-  const daysText = expired
-    ? "ended"
-    : pr.daysLeft === 0
-      ? "ends today"
-      : `${pr.daysLeft} ${pr.daysLeft === 1 ? "day" : "days"} left`;
-  const barLabel =
-    pr.allowance === null
-      ? `Allowance not established; ${daysText}`
-      : `${amount(pr.confirmed)} of ${amount(pr.allowance)} confirmed used${pr.candidate ? `, ${amount(pr.candidate)} possible` : ""}; ${daysText}`;
+  const correct = (e?: Evidence) => {
+    setCorrection(e);
+    setModal("evidence");
+  };
+  const done = s === "used" || s === "not_enrolled";
+  const needsAllowance = f.allowance === null && pr.partialWindow,
+    canMark =
+      !done &&
+      f.allowance !== null &&
+      (f.remaining ?? 0) > 0 &&
+      period.eligibility_status === "eligible" &&
+      !!period.identity_verified_at;
+  const prefill =
+    f.remaining === null
+      ? ""
+      : units
+        ? String(f.remaining)
+        : (f.remaining / 100).toFixed(2);
+  const description = String(snap.description ?? benefit?.description ?? "");
   return (
-    <article
-      className={`benefit-row${open ? " open" : ""}${expired ? " expired" : ""}`}
-    >
-      <div className="benefit-row-main">
-        <div className="benefit-row-title">
-          <h3>{period.benefit_name}</h3>
-          <span className="benefit-row-meta">
-            {showCard && (
-              <Link
-                href={`/cards/${period.card_id}`}
-                className="benefit-row-card"
-              >
-                {period.card_name} · {cardEnding(period.last4)}
-              </Link>
-            )}
-            <span>
-              {periodLabel(period)} · {daysText}
+    <div className={`benefit-detail${wide ? " wide" : ""}`}>
+      {wide && (
+        <header className="benefit-detail-heading">
+          <CardChip card={card} />
+          <div>
+            <span className="benefit-detail-muted">
+              {period.card_name} ·{" "}
+              {CADENCES[period.cadence as keyof typeof CADENCES] ??
+                period.cadence}
             </span>
-          </span>
-        </div>
-        <div className="benefit-row-progress">
-          <ProgressBar pr={pr} label={barLabel} />
-          <span className="benefit-row-amounts" aria-hidden="true">
-            {pr.allowance === null ? (
-              <em>Allowance not established</em>
-            ) : (
-              <>
-                <strong>{amount(pr.confirmed)}</strong> of{" "}
-                {amount(pr.allowance)}
-                {pr.candidate > 0 && (
-                  <span className="benefit-row-candidate">
-                    {" "}
-                    · {amount(pr.candidate)} possible
-                  </span>
-                )}
-                {pr.remaining !== null && pr.remaining > 0 && !expired && (
-                  <span className="benefit-row-remaining">
-                    {" "}
-                    · {amount(pr.remaining)} {fresh ? "left" : "unconfirmed"}
-                  </span>
-                )}
-              </>
+            <h2>{period.benefit_name}</h2>
+          </div>
+        </header>
+      )}
+      {wide && !done && (
+        <dl className="benefit-figures">
+          <div>
+            <dt>{s === "unknown" ? "Maybe left" : "Left"}</dt>
+            <dd className="num">
+              {f.remaining === null
+                ? "Unknown"
+                : `${amount(f.remaining)}${s === "unknown" ? "?" : ""}`}
+            </dd>
+          </div>
+          <div>
+            <dt>Ends</dt>
+            <dd>{dateLabel(lastDay(period))}</dd>
+          </div>
+          <div>
+            <dt>Used</dt>
+            <dd className="num">
+              {amount(f.confirmed)} <small>of {amount(f.allowance)}</small>
+            </dd>
+          </div>
+        </dl>
+      )}
+      <p className="benefit-detail-text">
+        {shortDate(period.period_start)} to {shortDate(lastDay(period))}.{" "}
+        {s === "used" &&
+          `${amount(f.confirmed)} of ${amount(f.allowance)} used. `}
+        {description}
+        {benefit?.effective_to &&
+          ` Through ${dateLabel(lastDay({ period_end_exclusive: benefit.effective_to }))}.`}
+      </p>
+      {s === "not_enrolled" ? (
+        <p className="benefit-detail-muted">
+          {period.eligibility_status === "ineligible"
+            ? "Marked not eligible for your card. It is left out of alerts and totals."
+            : "You said you are not enrolled. It is left out of alerts and totals."}
+        </p>
+      ) : null}
+      {!done && termsAlert && (
+        <div className="notice">
+          <strong>{termsAlert.title}</strong>
+          <p>{termsAlert.detail}</p>
+          <div className="settings-row-actions">
+            {benefit && card && (
+              <button
+                type="button"
+                className="secondary"
+                disabled={!!busy || offline}
+                onClick={() => setModal("terms")}
+              >
+                Review and save a new version
+              </button>
             )}
-          </span>
+            <button
+              type="button"
+              className="text-button"
+              disabled={!!busy || offline}
+              onClick={() =>
+                void act(
+                  "terms",
+                  () =>
+                    run("acknowledgeAlert", {
+                      alert_key: termsAlert.key,
+                      context: termsAlert.context,
+                    }),
+                  "Current terms kept. This notice returns if the rule file changes again.",
+                )
+              }
+            >
+              Keep current terms
+            </button>
+          </div>
         </div>
-        <div className="benefit-row-side">
-          <Badge period={period} />
+      )}
+      {!done && period.eligibility_status === "unknown" && (
+        <button
+          type="button"
+          className="text-button"
+          disabled={!!busy || offline}
+          onClick={() =>
+            void act(
+              "eligible",
+              () => run("markEligible", { id: period.benefit_id }),
+              "Eligibility confirmed based on your check.",
+            )
+          }
+        >
+          <Check size={14} /> I verified my card is eligible
+        </button>
+      )}
+      {!done && needsAllowance && (
+        <p className="benefit-detail-muted">
+          This window starts inside new terms, so its allowance is unknown.{" "}
           <button
             type="button"
-            className="icon-button row-toggle"
-            aria-expanded={open}
-            aria-label={`${open ? "Hide" : "Show"} details for ${period.benefit_name}`}
-            onClick={() => setOpen(!open)}
+            className="text-button"
+            disabled={offline}
+            onClick={() => setModal("allowance")}
           >
-            <ChevronDown size={18} />
+            Set the allowance
           </button>
-        </div>
-      </div>
-      {(needsIdentity ||
-        needsEligibility ||
-        needsEnrollment ||
-        needsAllowance ||
-        hasCandidate ||
-        termsAlert ||
-        period.negative_balance) && (
-        <div className="benefit-row-hint">
-          {needsIdentity && (
-            <span>
-              Confirm this card’s identity first.{" "}
-              <Link href={`/cards/${period.card_id}`} className="text-button">
-                Open card
-              </Link>
-            </span>
-          )}
-          {needsEligibility && (
-            <span>
-              {period.eligibility_status === "ineligible"
-                ? "Marked not eligible for your card."
-                : "Eligibility unconfirmed."}{" "}
-              {period.eligibility_status !== "ineligible" && (
-                <button
-                  type="button"
-                  className="text-button"
-                  disabled={!!busy || offline}
-                  onClick={() =>
-                    void act(
-                      "eligible",
-                      () => run("markEligible", { id: period.benefit_id }),
-                      "Eligibility confirmed based on your check.",
-                    )
-                  }
-                >
-                  <Check size={14} /> I verified my card is eligible
-                </button>
-              )}
-            </span>
-          )}
-          {needsEnrollment && (
-            <span>
-              Enrollment unconfirmed.{" "}
-              <button
-                type="button"
-                className="text-button"
-                disabled={!!busy || offline}
-                onClick={() =>
-                  void act(
-                    "enroll",
-                    () => run("markEnrolled", { id: period.benefit_id }),
-                    "Enrollment marked active based on your confirmation.",
-                  )
-                }
-              >
-                <Check size={14} /> I verified enrollment is active
-              </button>
-            </span>
-          )}
-          {needsAllowance && (
-            <span>
-              This window starts inside new terms, so its allowance is unknown.{" "}
-              <button
-                type="button"
-                className="text-button"
-                disabled={offline}
-                onClick={() => setModal("allowance")}
-              >
-                Set the allowance
-              </button>
-            </span>
-          )}
-          {hasCandidate && (
-            <span>
-              A purchase may qualify.{" "}
-              <button
-                type="button"
-                className="text-button"
-                onClick={() => setOpen(true)}
-              >
-                Review it
-              </button>
-            </span>
-          )}
-          {termsAlert && (
-            <span>
-              {termsAlert.title}.{" "}
-              <button
-                type="button"
-                className="text-button"
-                onClick={() => setOpen(true)}
-              >
-                See what changed
-              </button>
-            </span>
-          )}
-          {period.negative_balance && (
-            <span>
-              Reversals exceed recorded confirmations. Review the evidence.
-            </span>
-          )}
-        </div>
-      )}
-      {!fresh && !expired && (
-        <p className="benefit-row-coverage">
-          {period.coverage_status === "unavailable"
-            ? "Coverage unavailable"
-            : period.coverage_status === "partial"
-              ? "Partial transaction coverage"
-              : "Coverage needs a fresh check"}{" "}
-          · remaining value may be incomplete.
         </p>
       )}
-      {quickable && (
-        <form className="benefit-row-quick" onSubmit={quick}>
+      <EvidenceList
+        period={period}
+        evidence={live}
+        onCorrect={done ? undefined : (e) => correct(e)}
+      />
+      {s === "used" && (
+        <button
+          type="button"
+          className="text-button"
+          disabled={offline}
+          onClick={() =>
+            correct(live.find((e) => e.confidence === "confirmed"))
+          }
+        >
+          Correct this
+        </button>
+      )}
+      {canMark && (
+        <form className="mark-used" onSubmit={markUsed}>
           <label>
-            <span>{units ? `Used (${pr.unitLabel})` : "Amount used"}</span>
+            <span>{units ? `Used (${unitLabel})` : "Amount used"}</span>
             <input
               name="amount"
               inputMode="decimal"
-              placeholder={units ? "1" : "0.00"}
+              defaultValue={prefill}
               aria-label={`${units ? "Units" : "Amount"} used for ${period.benefit_name}`}
             />
           </label>
@@ -362,7 +750,7 @@ export function BenefitRow({
               aria-label={`Date used for ${period.benefit_name}`}
             />
           </label>
-          <label className="benefit-row-note">
+          <label className="mark-used-note">
             <span>Note</span>
             <input
               name="note"
@@ -377,13 +765,161 @@ export function BenefitRow({
           >
             <Check size={15} /> Mark used
           </button>
+        </form>
+      )}
+      {error && (
+        <p role="alert" className="form-error">
+          {error}
+        </p>
+      )}
+      {s === "not_enrolled" && period.eligibility_status !== "ineligible" ? (
+        <button
+          type="button"
+          className="text-button"
+          disabled={!!busy || offline}
+          onClick={() => void setEnrolled(true)}
+        >
+          I am enrolled after all
+        </button>
+      ) : !done ? (
+        <div className="benefit-detail-footer">
+          {enrollment && (
+            <span>
+              Enrolled:{" "}
+              {enrollment === "active"
+                ? "yes"
+                : enrollmentUnknown(benefit!)
+                  ? "not answered"
+                  : "no"}
+            </span>
+          )}
+          {enrollment && (
+            <button
+              type="button"
+              className="text-button"
+              disabled={!!busy || offline}
+              onClick={() => void setEnrolled(false)}
+            >
+              Not enrolled, hide this
+            </button>
+          )}
           <button
             type="button"
             className="text-button"
             disabled={offline}
-            onClick={() => setModal("evidence")}
+            onClick={() => correct(undefined)}
           >
             Confirm redemption
+          </button>
+          <button
+            type="button"
+            className="text-button"
+            disabled={offline}
+            onClick={() => setModal("note")}
+          >
+            Add note
+          </button>
+          {typeof snap.issuer_source_url === "string" && (
+            <a href={snap.issuer_source_url} target="_blank" rel="noreferrer">
+              Issuer terms <ExternalLink size={12} />
+            </a>
+          )}
+          {benefit && ruleActions?.(benefit)}
+        </div>
+      ) : null}
+      {period.notes && <p className="benefit-detail-muted">{period.notes}</p>}
+      {modal === "evidence" && (
+        <EvidenceForm
+          period={period}
+          correction={correction}
+          onClose={() => setModal(null)}
+        />
+      )}
+      {modal === "allowance" && (
+        <AllowanceForm period={period} onClose={() => setModal(null)} />
+      )}
+      {modal === "note" && (
+        <NoteForm period={period} onClose={() => setModal(null)} />
+      )}
+      {modal === "terms" && benefit && card && (
+        <BenefitForm
+          card={card}
+          previous={benefit}
+          templateId={String(termsAlert?.context.rule_id ?? "")}
+          onClose={() => setModal(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// A membership's detail (rule 11): its terms, Active or Not activated, and only two inputs: the
+// activation date and the enrollment toggle.
+function MembershipDetail({
+  benefit,
+  ruleActions,
+  wide,
+}: {
+  benefit: Benefit;
+  ruleActions?: (b: Benefit) => ReactNode;
+  wide: boolean;
+}) {
+  const { data, offline } = useApp(),
+    { busy, error, act } = useAct(),
+    card = data.cards.find((c) => c.id === benefit.card_id),
+    today = localDate(new Date(), card?.issuer_timezone),
+    s = membershipStatus(benefit, today),
+    through = membershipThrough(benefit);
+  async function save(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const on = String(new FormData(e.currentTarget).get("activated_on") ?? "");
+    await act(
+      "activation",
+      () => run("setActivation", { id: benefit.id, activated_on: on }),
+      "Activation date saved.",
+    );
+  }
+  const notEnrolledYet =
+    benefit.enrollment_required && benefit.enrollment_status === "inactive";
+  return (
+    <div className={`benefit-detail${wide ? " wide" : ""}`}>
+      {wide && (
+        <header className="benefit-detail-heading">
+          <CardChip card={card} />
+          <div>
+            <span className="benefit-detail-muted">
+              {card?.display_name} · Membership
+            </span>
+            <h2>{benefit.name}</h2>
+          </div>
+        </header>
+      )}
+      <p className="benefit-detail-text">
+        <strong>{ROW_STATUS_LABELS[s]}</strong>
+        {benefit.activated_on && !notEnrolledYet
+          ? ` since ${dateLabel(benefit.activated_on)}${benefit.activation_assumed ? " (assumed)" : ""}`
+          : ""}
+        {through ? `, through ${dateLabel(through)}` : ""}.{" "}
+        {benefit.description}
+      </p>
+      {!notEnrolledYet && (
+        <form className="mark-used" onSubmit={save}>
+          <label>
+            <span>Activated on</span>
+            <input
+              name="activated_on"
+              type="date"
+              required
+              defaultValue={benefit.activated_on ?? today}
+              max={today}
+              aria-label={`Activation date for ${benefit.name}`}
+            />
+          </label>
+          <button
+            className="small-button"
+            disabled={busy === "activation" || offline}
+          >
+            Save date
           </button>
         </form>
       )}
@@ -392,82 +928,134 @@ export function BenefitRow({
           {error}
         </p>
       )}
-      {open && (
-        <PeriodPanel
-          period={period}
-          benefit={benefit}
-          embedded
-          initialOpen
-          termsAlert={termsAlert}
-          actions={actions}
-        />
-      )}
-      {modal === "evidence" && (
-        <EvidenceForm period={period} onClose={() => setModal(null)} />
-      )}
-      {modal === "allowance" && (
-        <AllowanceForm period={period} onClose={() => setModal(null)} />
-      )}
-    </article>
+      <div className="benefit-detail-footer">
+        {benefit.enrollment_required && (
+          <button
+            type="button"
+            className="text-button"
+            disabled={!!busy || offline}
+            onClick={() =>
+              void act(
+                "enroll",
+                () =>
+                  run("saveEnrollment", {
+                    card_id: benefit.card_id,
+                    answers: [{ id: benefit.id, enrolled: notEnrolledYet }],
+                  }),
+                notEnrolledYet
+                  ? "Marked enrolled."
+                  : "Marked not activated. It stops alerting.",
+              )
+            }
+          >
+            {notEnrolledYet
+              ? "I am enrolled after all"
+              : "Not enrolled, hide this"}
+          </button>
+        )}
+        {benefit.issuer_source_url && (
+          <a href={benefit.issuer_source_url} target="_blank" rel="noreferrer">
+            Issuer terms <ExternalLink size={12} />
+          </a>
+        )}
+        {ruleActions?.(benefit)}
+      </div>
+    </div>
   );
 }
 
-// Current periods grouped by reset timeframe, soonest-ending first, with totals per group.
-export function BenefitGroups({
-  periods,
-  benefits = [],
-  alerts = [],
-  showCard = false,
-  initialOpen = false,
-  actions,
+// The card's one-time enrollment question (rule 4): every benefit whose enrollment is unknown,
+// checked by default; Save answers all of them, so the panel does not come back.
+export function EnrollmentChecklist({
+  card,
+  benefits,
 }: {
-  periods: Period[];
-  benefits?: Benefit[];
-  alerts?: Alert[];
-  showCard?: boolean;
-  initialOpen?: boolean;
-  actions?: (benefit: Benefit) => ReactNode;
+  card: Card;
+  benefits: Benefit[];
 }) {
-  const groups = groupByCadence(periods);
+  const { offline } = useApp(),
+    { busy, error, act } = useAct();
+  if (!benefits.length) return null;
+  async function save(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    await act(
+      "save",
+      () =>
+        run("saveEnrollment", {
+          card_id: card.id,
+          answers: benefits.map((b) => ({ id: b.id, enrolled: f.has(b.id) })),
+        }),
+      "Enrollment saved. Unchecked benefits stop alerting.",
+    );
+  }
   return (
-    <>
-      {groups.map((g) => (
-        <section key={g.cadence} className="cadence-group">
-          <header className="cadence-group-heading">
-            <h2>
-              {g.label} <span className="count">{g.periods.length}</span>
-            </h2>
-            <span className="cadence-group-totals">
-              {g.allowanceCents > 0 && (
-                <>
-                  <strong>{money(g.confirmedCents)}</strong> of{" "}
-                  {money(g.allowanceCents)} used
-                  {g.unknownAllowance ? " (some allowances unknown)" : ""}{" "}
-                  ·{" "}
-                </>
-              )}
-              {g.endsOn && `next reset ${dateLabel(shiftDays(g.endsOn, -1))}`}
-            </span>
-          </header>
-          {g.periods.map((p) => {
-            const b = benefits.find((x) => x.id === p.benefit_id);
-            return (
-              <BenefitRow
-                key={p.id}
-                period={p}
-                benefit={b}
-                showCard={showCard}
-                initialOpen={initialOpen}
-                termsAlert={alerts.find(
-                  (a) =>
-                    a.kind === "terms_changed" && a.benefitId === p.benefit_id,
-                )}
-                actions={b && actions ? actions(b) : undefined}
-              />
-            );
-          })}
-        </section>
-      ))}
-    </>
+    <section
+      className="enrollment-checklist"
+      id="enrollment"
+      aria-labelledby="enrollment-title"
+    >
+      <h2 id="enrollment-title">Which of these are you enrolled in?</h2>
+      <p>
+        {benefits.length}{" "}
+        {benefits.length === 1 ? "benefit needs" : "benefits need"} activation.
+        Unchecked ones stop showing up.
+      </p>
+      <form onSubmit={save}>
+        <div className="enrollment-options">
+          {benefits.map((b) => (
+            <label key={b.id}>
+              <input type="checkbox" name={b.id} defaultChecked />
+              {shortName(b.name)}
+            </label>
+          ))}
+        </div>
+        {error && (
+          <p role="alert" className="form-error">
+            {error}
+          </p>
+        )}
+        <button className="primary" disabled={!!busy || offline}>
+          Save
+        </button>
+      </form>
+    </section>
+  );
+}
+
+// The card's one caveat line (rule 3), from the synced accounts linked to it.
+export function SyncCaveat({ card }: { card: Card }) {
+  const { data } = useApp(),
+    linked = data.accounts.filter(
+      (a) => a.card_id === card.id && a.mapping_status === "confirmed",
+    ),
+    today = localDate(new Date(), card.issuer_timezone),
+    through = linked
+      .map((a) => a.synced_through)
+      .filter((d): d is string => !!d)
+      .sort()[0],
+    stale =
+      !through ||
+      through < shiftDays(today, -7) ||
+      linked.some((a) => accountFreshness(a) !== "current");
+  if (!linked.length)
+    return (
+      <p className="sync-caveat stale">
+        No synced account covers this card, so use will not show.{" "}
+        <Link href="/settings">Link one in Settings</Link>
+      </p>
+    );
+  return (
+    <p className={`sync-caveat${stale ? " stale" : ""}`}>
+      {through
+        ? `Transactions synced through ${shortDate(through)}`
+        : "Transactions not synced yet"}
+      {stale && (
+        <>
+          ; newer use will not show.{" "}
+          <Link href="/settings">Check Settings</Link>
+        </>
+      )}
+    </p>
   );
 }

@@ -4,6 +4,7 @@ import {
   ensurePeriod,
   env,
   fixture,
+  insert,
   recordEvidence,
   user as syntheticUser,
 } from "../helpers";
@@ -19,7 +20,7 @@ async function login(page: Page, owner: Awaited<ReturnType<typeof user>>) {
   expect(response.ok()).toBe(true);
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "Good things, kept in view." }),
+    page.getByRole("heading", { name: "Use before it expires" }),
   ).toBeVisible();
 }
 async function noOverflow(page: Page) {
@@ -37,6 +38,8 @@ test("creates the nine-card collection, verifies identity and adds a rule throug
   await login(page, owner);
   await expect(page.getByText("Let’s get your cards together.")).toBeVisible();
   await page.getByRole("button", { name: "Set up my cards" }).click();
+  await expect(page.getByText("Your cards are added.")).toBeVisible();
+  await page.goto("/cards");
   await expect(page.locator(".card-tile")).toHaveCount(9);
   await noOverflow(page);
   await page
@@ -69,11 +72,19 @@ test("creates the nine-card collection, verifies identity and adds a rule throug
     .getByLabel("I checked the source, effective dates, and conditions above.")
     .check();
   await page.getByRole("button", { name: "Save verified rule" }).click();
+  // One collapsed line; without synced coverage the amount is a question, never "unconfirmed".
+  const line = page
+    .locator(".benefit-line")
+    .filter({ hasText: "Synthetic browser-test benefit" });
+  await expect(line.locator(".benefit-line-amount")).toHaveText(
+    "$10? (unknown)",
+  );
+  await expect(line.getByRole("button")).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
   await expect(
-    page.getByRole("heading", { name: "Synthetic browser-test benefit" }),
-  ).toBeVisible();
-  await expect(
-    page.getByText("Coverage unavailable", { exact: false }),
+    page.getByText("No synced account covers this card, so use will not show."),
   ).toBeVisible();
   await noOverflow(page);
   const saved = await owner.q("select * from public.benefits where name=$1", [
@@ -82,13 +93,18 @@ test("creates the nine-card collection, verifies identity and adds a rule throug
   expect(saved).toHaveLength(1);
 });
 
-test("records, corrects and rejects evidence with actual persistence and preserved history", async ({
+test("records, confirms and rejects evidence with actual persistence and preserved history", async ({
   page,
 }) => {
   const owner = await user(),
     { card, period } = await fixture(owner, "monthly", {}, localDate());
   await login(page, owner);
   await page.goto(`/cards/${card.id}`);
+  const line = page
+    .locator(".benefit-line")
+    .filter({ hasText: "Synthetic test allowance" });
+  const open = () => line.locator(".benefit-line-button").click();
+  await open();
   // The full form, for evidence with a source and an assessment.
   await page
     .getByRole("button", { name: "Confirm redemption", exact: true })
@@ -103,25 +119,20 @@ test("records, corrects and rejects evidence with actual persistence and preserv
   await page.getByRole("button", { name: "Save evidence" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.reload();
-  await expect(page.locator(".benefit-row-amounts")).toContainText("$3");
-  await expect(page.locator(".progress-confirmed")).toHaveAttribute(
+  await expect(line.locator(".benefit-line-amount")).toHaveText(
+    "$7? (unknown)",
+  );
+  await expect(line.locator(".progress-confirmed")).toHaveAttribute(
     "style",
     /width: 30%/,
   );
-  // The quick entry on the row, for a partial use the owner already checked.
+  // The quick entry in the expanded row, for a partial use the owner already checked.
+  await open();
   await page.getByLabel(/^Amount used for/).fill("2");
   await page.getByRole("button", { name: "Mark used" }).click();
-  await expect(page.locator(".benefit-row-amounts")).toContainText("$5");
-  await expect(page.locator(".alert-item", { hasText: "Used $2" })).toHaveCount(
-    0,
+  await expect(line.locator(".benefit-line-amount")).toHaveText(
+    "$5? (unknown)",
   );
-  await page.goto("/");
-  await expect(
-    page.locator(".alert-item", {
-      hasText: "Used $2: Synthetic test allowance",
-    }),
-  ).toBeVisible();
-  await page.goto(`/cards/${card.id}`);
   const candidate = await recordEvidence(owner, {
     benefit_period_id: period.id,
     source_type: "purchase",
@@ -133,21 +144,20 @@ test("records, corrects and rejects evidence with actual persistence and preserv
     notes: "Synthetic imported candidate",
   });
   await page.getByRole("button", { name: "Refresh records" }).click();
-  await expect(page.locator(".benefit-row-hint")).toContainText(
-    "A purchase may qualify.",
+  await expect(line.locator(".badge.review")).toHaveText("Review");
+  // Candidates are answered in Review, not on the card.
+  await page.goto("/review");
+  await expect(
+    page.getByRole("heading", { name: "Was this purchase a benefit?" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Yes, count $4" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Was this purchase a benefit?" }),
+  ).toHaveCount(0);
+  await page.goto(`/cards/${card.id}`);
+  await expect(line.locator(".benefit-line-amount")).toHaveText(
+    "$1? (unknown)",
   );
-  await page.getByRole("button", { name: /^Show details for/ }).click();
-  await page.getByRole("button", { name: "Review candidate" }).click();
-  await page
-    .getByLabel("What did you verify?")
-    .fill("Synthetic posted credit checked by user.");
-  await page
-    .getByLabel("This assessment is supported by the evidence I reviewed.")
-    .check();
-  await page.getByRole("button", { name: "Save correction" }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.locator(".benefit-row-amounts")).toContainText("$9");
-  await expect(page.locator(".period-amounts")).toContainText("$9");
   const rows = await owner.q(
     "select * from public.redemption_evidence where benefit_period_id=$1",
     [period.id],
@@ -156,7 +166,7 @@ test("records, corrects and rejects evidence with actual persistence and preserv
   expect(
     rows.find((e) => e.supersedes_evidence_id === candidate.id)?.confidence,
   ).toBe("confirmed");
-  await recordEvidence(owner, {
+  const second = await recordEvidence(owner, {
     id: randomUUID(),
     benefit_period_id: period.id,
     source_type: "purchase",
@@ -166,11 +176,18 @@ test("records, corrects and rejects evidence with actual persistence and preserv
     eligibility_result: "eligible",
     recorded_by: "import",
   });
-  await page.getByRole("button", { name: "Refresh records" }).click();
-  await page.getByRole("button", { name: "Reject candidate" }).click();
-  await page.getByLabel("Reason").fill("Synthetic nonqualifying transaction.");
-  await page.getByRole("button", { name: "Save rejection" }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.goto("/review");
+  await page.getByRole("button", { name: "Not this" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Was this purchase a benefit?" }),
+  ).toHaveCount(0);
+  const [rejected] = await owner.q(
+    "select confidence from public.redemption_evidence where supersedes_evidence_id=$1",
+    [second.id],
+  );
+  expect(rejected.confidence).toBe("rejected");
+  await page.goto(`/cards/${card.id}`);
+  await open();
   await page.getByRole("button", { name: "Add note" }).click();
   await page
     .getByLabel("Note", { exact: true })
@@ -189,6 +206,185 @@ test("records, corrects and rejects evidence with actual persistence and preserv
   await noOverflow(page);
 });
 
+const syntheticRule = (cardId: string, extra: Record<string, unknown>) => ({
+  card_id: cardId,
+  cadence: "monthly",
+  effective_from: "2020-01-01",
+  issuer_source_url: "https://example.com/synthetic-test-only",
+  verified_at: new Date().toISOString(),
+  enabled: true,
+  eligibility_status: "eligible",
+  enrollment_status: "not_required",
+  ...extra,
+});
+const expanded = (page: Page) =>
+  page.locator('.benefit-line-button[aria-expanded="true"]');
+
+test("keeps rows collapsed, expands one at a time, and gives used rows and memberships no amount form", async ({
+  page,
+}) => {
+  const owner = await user(),
+    { card, period } = await fixture(owner, "monthly", {}, localDate());
+  const used = await insert(
+    owner,
+    "benefits",
+    syntheticRule(card.id, {
+      name: "Synthetic used credit",
+      nominal_amount_cents: 500,
+    }),
+  );
+  const usedPeriod = await ensurePeriod(owner, used.id, localDate());
+  await recordEvidence(owner, {
+    benefit_period_id: usedPeriod.id,
+    source_type: "manual",
+    transaction_date: usedPeriod.period_start,
+    amount_cents: 500,
+    confidence: "confirmed",
+    eligibility_result: "eligible",
+    recorded_by: "user",
+    notes: "Synthetic owner confirmation for the browser test.",
+  });
+  await insert(
+    owner,
+    "benefits",
+    syntheticRule(card.id, {
+      name: "Synthetic streaming membership",
+      cadence: "custom",
+      kind: "membership",
+      custom_end_exclusive: "2099-01-01",
+    }),
+  );
+  await login(page, owner);
+  await page.goto(`/cards/${card.id}`);
+  await expect(page.locator(".benefit-line-button").first()).toBeVisible();
+  await expect(expanded(page)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Mark used" })).toHaveCount(0);
+  await page
+    .locator(".benefit-line")
+    .filter({ hasText: period.benefit_name })
+    .locator(".benefit-line-button")
+    .click();
+  await expect(expanded(page)).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Mark used" })).toHaveCount(1);
+  // The used row sits in its fold, reads its status, and opens with no form and no buttons.
+  await page.getByRole("button", { name: "Done this period (1)" }).click();
+  const usedLine = page
+    .locator(".benefit-line")
+    .filter({ hasText: "Synthetic used credit" });
+  await expect(usedLine.locator(".benefit-line-amount")).toHaveText(
+    "Used · $5 of $5",
+  );
+  await usedLine.locator(".benefit-line-button").click();
+  await expect(expanded(page)).toHaveCount(1);
+  await expect(usedLine.locator(".benefit-line-button")).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
+  await expect(page.getByRole("button", { name: "Mark used" })).toHaveCount(0);
+  await expect(page.getByLabel(/^Amount used for/)).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Confirm redemption" }),
+  ).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Add note" })).toHaveCount(0);
+  // A membership has an activation date as its only input.
+  await page.getByRole("button", { name: /^Synthetic streaming/ }).click();
+  const membership = page.locator(".benefit-line.membership");
+  await membership.locator(".benefit-line-button").click();
+  await expect(expanded(page)).toHaveCount(1);
+  await expect(membership.locator(".benefit-line-amount")).toHaveText(
+    "Not activated",
+  );
+  await expect(page.getByLabel(/^Amount used for/)).toHaveCount(0);
+  await page
+    .getByLabel("Activation date for Synthetic streaming membership")
+    .fill(localDate());
+  await page.getByRole("button", { name: "Save date" }).click();
+  await expect(membership.locator(".benefit-line-amount")).toHaveText("Active");
+  await noOverflow(page);
+});
+
+test("asks the enrollment checklist once and drops Not enrolled rows from every alert", async ({
+  page,
+}) => {
+  const owner = await user(),
+    enrollable = { enrollment_required: true, enrollment_status: "unknown" },
+    { card, period: dining } = await fixture(
+      owner,
+      "monthly",
+      { ...enrollable, name: "Synthetic dining credit" },
+      localDate(),
+    );
+  const ride = await insert(
+    owner,
+    "benefits",
+    syntheticRule(card.id, {
+      name: "Synthetic ride credit",
+      nominal_amount_cents: 1500,
+      ...enrollable,
+    }),
+  );
+  await ensurePeriod(owner, ride.id, localDate());
+  // A purchase that would ask "Was this purchase a benefit?" if the owner were enrolled.
+  await recordEvidence(owner, {
+    benefit_period_id: dining.id,
+    source_type: "purchase",
+    transaction_date: dining.period_start,
+    amount_cents: 400,
+    confidence: "candidate",
+    eligibility_result: "eligible",
+    recorded_by: "import",
+  });
+  await login(page, owner);
+  await expect(
+    page.getByRole("link", {
+      name: /Which Synthetic test card perks are you enrolled in\?/,
+    }),
+  ).toBeVisible();
+  await page.goto(`/cards/${card.id}`);
+  const checklist = page.getByRole("heading", {
+    name: "Which of these are you enrolled in?",
+  });
+  await expect(checklist).toHaveCount(1);
+  await page
+    .getByRole("checkbox", { name: "Synthetic dining credit" })
+    .uncheck();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(checklist).toHaveCount(0);
+  await page.reload();
+  await expect(
+    page.locator(".benefit-line").filter({ hasText: "Synthetic ride credit" }),
+  ).toBeVisible();
+  await expect(checklist).toHaveCount(0);
+  await page.getByRole("button", { name: "Not enrolled (1)" }).click();
+  const dropped = page
+    .locator(".benefit-line")
+    .filter({ hasText: "Synthetic dining credit" });
+  await expect(dropped.locator(".benefit-line-amount")).toHaveText(
+    "Not enrolled",
+  );
+  await expect(dropped.locator(".badge")).toHaveCount(0);
+  await dropped.locator(".benefit-line-button").click();
+  await expect(page.getByRole("button", { name: "Mark used" })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "I am enrolled after all" }),
+  ).toBeVisible();
+  // The purchase on the dropped row asks nothing, and enrollment is answered.
+  await expect(page.locator(".nav-badge")).toHaveCount(0);
+  await page.goto("/review");
+  for (const name of ["Was this purchase a benefit?", "Enrollment"])
+    await expect(page.getByRole("heading", { name })).toHaveCount(0);
+  await expect(page.locator(".review-item")).toHaveCount(0);
+  expect(
+    await owner.q(
+      "select name, enrollment_status from public.benefits where card_id=$1 order by name",
+      [card.id],
+    ),
+  ).toEqual([
+    { name: "Synthetic dining credit", enrollment_status: "inactive" },
+    { name: "Synthetic ride credit", enrollment_status: "active" },
+  ]);
+});
+
 test("records explicit coverage, shows honest totals, and keeps old periods across refreshes", async ({
   page,
 }) => {
@@ -202,7 +398,10 @@ test("records explicit coverage, shows honest totals, and keeps old periods acro
       .slice(0, 10),
   );
   await login(page, owner);
-  await expect(page.locator(".summary-value")).toHaveText("—");
+  // Without coverage the total is a question; Home lists only the current window.
+  await expect(page.locator(".benefit-section-summary")).toHaveText(
+    "$10? left",
+  );
   await page.goto("/settings");
   await page
     .getByRole("button", { name: "Record a manual reconciliation" })
@@ -224,7 +423,7 @@ test("records explicit coverage, shows honest totals, and keeps old periods acro
   await page.getByRole("button", { name: "Save reconciliation" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.goto("/");
-  await expect(page.locator(".summary-value")).toHaveText("$10");
+  await expect(page.locator(".benefit-section-summary")).toHaveText("$10 left");
   await page.goto("/history");
   await expect(page.locator(".period-panel")).toHaveCount(2);
   await page.reload();
@@ -314,6 +513,7 @@ test("has accessible login, overview, and card review screens", async ({
       nodes: v.nodes.map((n) => n.target),
     })),
   ).toEqual([]);
+  await page.goto("/cards");
   await page
     .getByRole("link")
     .filter({ hasText: "American Express" })
@@ -337,6 +537,7 @@ test("shows both Ink cards without invented digits and saves last-four edits", a
   const owner = await user();
   await owner.q("select public.initialize_cards()");
   await login(page, owner);
+  await page.goto("/cards");
   await expect(
     page.getByRole("link").filter({ hasText: "Ink Business Cash" }),
   ).toContainText("Last four not set");
@@ -352,7 +553,7 @@ test("shows both Ink cards without invented digits and saves last-four edits", a
   await page.getByRole("button", { name: "Save card details" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.reload();
-  await expect(page.locator(".page-heading .eyebrow")).toContainText("0555");
+  await expect(page.locator(".card-heading .eyebrow")).toContainText("0555");
   expect(
     (
       await owner.q("select * from public.cards where product_name=$1", [
@@ -490,6 +691,7 @@ test("shows a linked SimpleFIN connection without the token box, and hides unuse
     [connection.id, "a".repeat(64), card.id],
   );
   await login(page, owner);
+  await page.goto("/cards");
   await expect(page.locator(".card-tile")).toHaveCount(1);
   await page.goto("/settings");
   await expect(page.getByRole("heading", { name: "SimpleFIN" })).toBeVisible();

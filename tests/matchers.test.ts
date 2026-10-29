@@ -204,7 +204,7 @@ describe("period coverage", () => {
 });
 
 describe("researched benefits for a confirmed card (synthetic owner)", () => {
-  it("adds each researched rule once, skips custom windows, and leaves enrollment unknown", async () => {
+  it("adds each researched rule once, skips custom allowance windows, adds memberships and leaves enrollment unknown", async () => {
     const { runOperation } = await import("../src/server/ledger");
     const owner = await user();
     const unconfirmed = await insert(owner, "cards", {
@@ -229,19 +229,29 @@ describe("researched benefits for a confirmed card (synthetic owner)", () => {
     const reserve = RULE_FILES.find(
       (f) => f.catalog_key === "chase-sapphire-reserve",
     )!;
+    const membership = (r: (typeof reserve.rules)[number]) =>
+      r.amount_cents == null && r.units == null;
     expect(first.skipped).toEqual(
-      reserve.rules.filter((r) => r.period === "custom").map((r) => r.name),
+      reserve.rules
+        .filter((r) => r.period === "custom" && !membership(r))
+        .map((r) => r.name),
     );
     expect(first.added).toHaveLength(
-      reserve.rules.filter((r) => r.period !== "custom").length,
+      reserve.rules.filter((r) => r.period !== "custom" || membership(r))
+        .length,
     );
     expect(first.skipped).toContain("The Shops at Chase credit");
+    expect(first.added).toContain(
+      "Complimentary Apple TV and Apple Music subscriptions",
+    );
     const again = (await withOwner(owner.id, (tx) =>
       runOperation(tx, "addResearchedBenefits", { card_id: unconfirmed.id }),
     )) as { added: string[] };
     expect(again.added).toEqual([]);
     const rows = await owner.q(
-      "select cadence, enrollment_required, enrollment_status, eligibility_status, eligibility_rules_json->>'catalog_rule_id' as rule from public.benefits",
+      `select name, cadence, kind, activated_on, activation_assumed, custom_end_exclusive, nominal_amount_cents,
+         nominal_units, enrollment_required, enrollment_status, eligibility_status,
+         eligibility_rules_json->>'catalog_rule_id' as rule from public.benefits`,
     );
     expect(rows).toHaveLength(first.added.length);
     expect(rows.every((r) => r.eligibility_status === "eligible")).toBe(true);
@@ -252,6 +262,42 @@ describe("researched benefits for a confirmed card (synthetic owner)", () => {
           : r.enrollment_status === "not_required",
       ),
     ).toBe(true);
-    expect(rows.some((r) => r.cadence === "custom")).toBe(false);
+    // Rules without an amount are memberships with an assumed activation date; only they may
+    // have custom windows, and they open no periods.
+    const memberships = rows.filter((r) => r.kind === "membership");
+    expect(memberships.map((r) => r.name).sort()).toEqual(
+      reserve.rules
+        .filter(membership)
+        .map((r) => r.name)
+        .sort(),
+    );
+    expect(
+      memberships.every(
+        (r) =>
+          r.activated_on &&
+          r.activation_assumed &&
+          r.nominal_amount_cents === null &&
+          r.nominal_units === null,
+      ),
+    ).toBe(true);
+    expect(
+      memberships.find((r) => r.rule === "csr/apple-tv-apple-music")
+        ?.custom_end_exclusive,
+    ).toBe("2027-06-23");
+    expect(
+      rows.some((r) => r.cadence === "custom" && r.kind !== "membership"),
+    ).toBe(false);
+    const snapshot = await withOwner(owner.id, async (tx) => {
+      const { loadSnapshot } = await import("../src/server/ledger");
+      return loadSnapshot(tx);
+    });
+    // Only the travel credit waits for an anniversary; no membership asks for period dates.
+    expect(snapshot.periodErrors).toEqual([
+      "Annual travel credit: Cardmember anniversary needs confirmation",
+    ]);
+    const ids = new Set(
+      snapshot.benefits.filter((b) => b.kind === "membership").map((b) => b.id),
+    );
+    expect(snapshot.periods.some((p) => ids.has(p.benefit_id))).toBe(false);
   });
 });

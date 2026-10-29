@@ -127,6 +127,7 @@ export async function runMatchers(
     }
   };
   for (const b of benefits) {
+    if (b.kind === "membership") continue;
     const rule = lookup(b.eligibility_rules_json?.catalog_rule_id);
     // Statements can only show use of benefits paid as statement credits. Others (Uber Cash,
     // in-app promos, hand-entered rules) never get coverage from transactions.

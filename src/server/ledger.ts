@@ -76,6 +76,19 @@ export const operations = {
   }),
   setBenefitEnabled: z.object({ id: uuid, enabled: z.boolean() }),
   markEnrolled: z.object({ id: uuid }),
+  // The card page's one-time enrollment checklist: each listed benefit becomes enrolled or not.
+  saveEnrollment: z.object({
+    card_id: uuid,
+    answers: z
+      .array(z.object({ id: uuid, enrolled: z.boolean() }))
+      .min(1)
+      .max(100),
+  }),
+  // A membership's activation date, set by the owner; it replaces the assumed date.
+  setActivation: z.object({ id: uuid, activated_on: day }),
+  // Backfill (rule 11): benefits with neither an amount nor units become memberships, keeping
+  // their start date as the activation date and the assumed flag from their provenance.
+  classifyMemberships: z.object({ card_id: uuid.optional() }),
   markEligible: z.object({ id: uuid }),
   // The owner re-read the issuer's terms and found them unchanged.
   markReverified: z.object({ id: uuid }),
@@ -169,8 +182,10 @@ const VERSIONABLE = new Set([
 // Adds each researched rule (data/benefits) for a confirmed card that the card does not have yet.
 // The card's confirmed identity and the issuer's verified terms make it eligible; enrollment
 // stays unknown until the owner confirms it, and rules the issuer gives no start date for begin
-// on January 1 of this year, marked as a default for the owner to correct. Rules that need
-// owner-specific dates (custom windows) and rules that have ended are skipped.
+// on January 1 of this year, marked as a default for the owner to correct. A rule with neither an
+// amount nor units is a membership: it is added with today as its assumed activation date and the
+// issuer's end date as its window end, and never opens a period. Allowance rules that need
+// owner-specific dates (custom windows), unverified rules and rules that have ended are skipped.
 const CATEGORIES: [RegExp, string][] = [
   [/dining|resy|dunkin|doordash|grubhub/i, "Dining"],
   [/travel|lyft|uber|global entry|edit/i, "Travel"],
@@ -197,9 +212,10 @@ export async function addResearchedBenefits(tx: Tx, cardId: string) {
     skipped: string[] = [];
   for (const r of file.rules) {
     if (existing.some((e) => e.rule === r.id)) continue;
+    const membership = r.amount_cents == null && r.units == null;
     if (
       !r.verified ||
-      ["custom", "one_time"].includes(r.period) ||
+      (!membership && ["custom", "one_time"].includes(r.period)) ||
       (r.effective_to && r.effective_to <= today)
     ) {
       skipped.push(r.name);
@@ -209,8 +225,9 @@ export async function addResearchedBenefits(tx: Tx, cardId: string) {
     await tx.query(
       `insert into public.benefits(card_id,name,description,category,cadence,nominal_amount_cents,nominal_units,
          unit_label,effective_from,effective_to,enrollment_required,enrollment_status,eligibility_status,
-         manual_verification_required,eligibility_rules_json,issuer_source_url,verified_at,enabled)
-       values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'eligible',$13,$14,$15,now(),true)`,
+         manual_verification_required,eligibility_rules_json,issuer_source_url,verified_at,enabled,
+         kind,activated_on,custom_end_exclusive)
+       values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'eligible',$13,$14,$15,now(),true,$16,$17,$18)`,
       [
         cardId,
         r.name,
@@ -234,8 +251,19 @@ export async function addResearchedBenefits(tx: Tx, cardId: string) {
           catalog_rule_id: r.id,
           catalog_rule_version: r.version,
           terms_verified: r.verified,
+          ...(membership
+            ? {
+                activation_date_confirmed_by:
+                  "assumed_needs_owner_confirmation",
+              }
+            : {}),
         },
         r.source_url,
+        membership ? "membership" : "allowance",
+        membership ? today : null,
+        membership && ["custom", "one_time"].includes(r.period)
+          ? r.effective_to
+          : null,
       ],
     );
     added.push(r.name);
@@ -396,6 +424,45 @@ export async function runOperation(
         [i.id],
       );
     }
+    case "saveEnrollment": {
+      const i = input as OperationInput<"saveEnrollment">;
+      const saved = [];
+      for (const a of i.answers)
+        saved.push(
+          await one(
+            tx,
+            `update public.benefits set enrollment_status=$3
+             where id=$1 and card_id=$2 and enrollment_required returning id, enrollment_status`,
+            [a.id, i.card_id, a.enrolled ? "active" : "inactive"],
+          ),
+        );
+      return saved;
+    }
+    case "setActivation": {
+      // Setting the date also answers enrollment: an activated membership is enrolled.
+      const i = input as OperationInput<"setActivation">;
+      return one(
+        tx,
+        `update public.benefits set activated_on=$2, activation_assumed=false,
+           enrollment_status=case when enrollment_required then 'active' else enrollment_status end
+         where id=$1 and kind='membership' returning *`,
+        [i.id, i.activated_on],
+      );
+    }
+    case "classifyMemberships": {
+      const i = input as OperationInput<"classifyMemberships">;
+      const { rows } = await tx.query(
+        `update public.benefits set kind='membership',
+           activated_on=coalesce(activated_on, reset_anchor, effective_from),
+           activation_assumed=coalesce(eligibility_rules_json->>'effective_date_confirmed_by','')
+             not in ('owner_transactions','owner')
+         where kind='allowance' and nominal_amount_cents is null and nominal_units is null
+           and ($1::uuid is null or card_id=$1)
+         returning id, name, activated_on, activation_assumed`,
+        [i.card_id ?? null],
+      );
+      return { classified: rows };
+    }
     case "markEligible": {
       const i = input as OperationInput<"markEligible">;
       return one(
@@ -505,7 +572,12 @@ export async function loadSnapshot(tx: Tx): Promise<Snapshot> {
     await tx.query("select * from public.benefits order by created_at, id")
   ).rows;
   const periodErrors: string[] = [];
+  // Memberships have no allowance, so they open no periods and show none (rule 11).
+  const memberships = new Set(
+    benefits.filter((b) => b.kind === "membership").map((b) => b.id),
+  );
   for (const b of benefits) {
+    if (memberships.has(b.id)) continue;
     const card = cards.find((c) => c.id === b.card_id);
     const today = localDate(new Date(), card?.issuer_timezone);
     if (!(
@@ -574,13 +646,19 @@ export async function loadSnapshot(tx: Tx): Promise<Snapshot> {
     tx,
     "select alert_lead_days from public.user_settings",
   );
+  const kinds = await optionalRows(
+    tx,
+    "select kind, activated_on, activation_assumed from public.benefits limit 0",
+  );
   return {
     acknowledgements: acknowledgements ?? [],
     settings: settings?.[0] ?? DEFAULT_SETTINGS,
     pendingMigration:
       acknowledgements === null || settings === null
         ? "0005_benefit_alerts.sql"
-        : null,
+        : kinds === null
+          ? "0006_memberships.sql"
+          : null,
     cardArt: cardArt.rows,
     accounts: accounts.rows,
     connections: connections.rows,
@@ -588,7 +666,9 @@ export async function loadSnapshot(tx: Tx): Promise<Snapshot> {
     imports: imports.rows,
     cards,
     benefits,
-    periods: periods.rows as Period[],
+    periods: (periods.rows as Period[]).filter(
+      (p) => !memberships.has(p.benefit_id),
+    ),
     evidence: evidence.rows,
     runs: runs.rows,
     audit: audit.rows,

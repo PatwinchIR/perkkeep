@@ -54,6 +54,10 @@ export type BenefitRow = {
   updated_at: string;
   verified_at: string | null;
   last_reverified_at: string | null;
+  // 0006: a membership has no allowance; its activation date is assumed until the owner sets it.
+  kind: "allowance" | "membership";
+  activated_on: string | null;
+  activation_assumed: boolean;
 };
 
 // public.alert_acknowledgements

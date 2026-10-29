@@ -1,4 +1,4 @@
-import { Dashboard } from "@/components/screens";
+import { HomeScreen } from "@/components/screens";
 export default function Page() {
-  return <Dashboard />;
+  return <HomeScreen />;
 }
