@@ -2,22 +2,23 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard,
+  House,
   WalletCards,
   ListChecks,
   History,
   Settings2,
   Leaf,
   RefreshCw,
-  ArrowUpRight,
 } from "lucide-react";
 import { useApp } from "./provider";
 import { useAlerts } from "./alerts";
-import { attention } from "@/lib/alerts";
+import { reviewQueue } from "@/lib/review";
+import { accountFreshness, shiftDays } from "@/lib/domain";
+import { shortDate } from "@/lib/benefit-status";
 import type { ReactNode } from "react";
 const nav = [
-  { href: "/", label: "Overview", icon: LayoutDashboard },
-  { href: "/cards", label: "My cards", icon: WalletCards },
+  { href: "/", label: "Home", icon: House },
+  { href: "/cards", label: "Cards", icon: WalletCards },
   { href: "/review", label: "Review", icon: ListChecks },
   { href: "/history", label: "History", icon: History },
   { href: "/settings", label: "Settings", icon: Settings2 },
@@ -25,9 +26,21 @@ const nav = [
 export function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname(),
     { busy, refresh, data, session } = useApp(),
-    needs = attention(useAlerts()).length;
+    alerts = useAlerts(),
+    needs = reviewQueue(data, alerts).count;
   const latest = data.runs[0],
     lastSuccess = data.runs.find((r) => r.status === "success");
+  const refreshButton = (
+    <button
+      className="icon-button refresh-button"
+      disabled={busy}
+      onClick={() => void refresh()}
+      aria-label="Refresh records"
+    >
+      <RefreshCw size={16} className={busy ? "spin" : ""} />
+      <span>Refresh</span>
+    </button>
+  );
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main">
@@ -66,17 +79,8 @@ export function Shell({ children }: { children: ReactNode }) {
           ))}
         </nav>
         <div className="sidebar-bottom">
-          <div className="little-leaf">
-            <Leaf size={20} />
-          </div>
-          <p>
-            A benefit remembered
-            <br />
-            is a benefit enjoyed.
-          </p>
-          <Link href="/settings#install">
-            Take Perkkeep with you <ArrowUpRight size={14} />
-          </Link>
+          <SyncStatus />
+          {refreshButton}
         </div>
         <div className="account">
           <span className="avatar">
@@ -94,32 +98,9 @@ export function Shell({ children }: { children: ReactNode }) {
             perkkeep<span>.</span>
           </span>
           <div className="sync-state">
-            <span
-              className={`state-dot ${latest?.status === "failed" ? "failed" : ""}`}
-            />
-            <span>
-              {latest
-                ? `Last checked ${new Date(latest.finished_at ?? latest.started_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-                : "Not reconciled yet"}
-            </span>
-            <span className="desktop-only">
-              ·{" "}
-              {latest?.status === "success"
-                ? "Complete reported coverage"
-                : latest?.status === "failed"
-                  ? "Last check failed"
-                  : "Coverage not established"}
-            </span>
+            <SyncStatus compact />
           </div>
-          <button
-            className="icon-button refresh-button"
-            disabled={busy}
-            onClick={() => void refresh()}
-            aria-label="Refresh records"
-          >
-            <RefreshCw size={16} className={busy ? "spin" : ""} />
-            <span>Refresh</span>
-          </button>
+          {refreshButton}
         </header>
         {latest?.status === "failed" && (
           <div className="inline-warning">
@@ -133,10 +114,8 @@ export function Shell({ children }: { children: ReactNode }) {
         )}
         {data.pendingMigration && (
           <div className="inline-warning" role="status">
-            Database migration {data.pendingMigration} has not been applied yet.
-            Alerts, progress and use entry work; dismissing alerts, alert
-            settings and allowance confirmation wait for it. Run{" "}
-            <code>npm run neon:migrate</code>.
+            Database migration {data.pendingMigration} has not been applied yet,
+            so some features wait for it. Run <code>npm run neon:migrate</code>.
           </div>
         )}
         <main id="main" tabIndex={-1}>
@@ -150,6 +129,64 @@ export function Shell({ children }: { children: ReactNode }) {
         </footer>
       </div>
     </div>
+  );
+}
+// Sync status (rule 13): when the newest linked account was synced through, and each linked card
+// whose account is behind, failing or stale. Without linked accounts, the last reconciliation.
+function SyncStatus({ compact = false }: { compact?: boolean }) {
+  const { data } = useApp(),
+    now = new Date(),
+    linked = data.accounts.filter(
+      (a) => a.mapping_status === "confirmed" && a.card_id,
+    ),
+    through = linked
+      .filter((a) => accountFreshness(a, now) === "current")
+      .map((a) => a.synced_through)
+      .filter((d): d is string => !!d)
+      .sort()
+      .at(-1),
+    behind = linked.filter(
+      (a) =>
+        accountFreshness(a, now) !== "current" ||
+        !a.synced_through ||
+        (!!through && a.synced_through < shiftDays(through, -3)),
+    ),
+    latest = data.runs[0];
+  if (!linked.length)
+    return (
+      <p className="sync-status">
+        <span
+          className={`state-dot ${latest?.status === "failed" ? "failed" : ""}`}
+        />
+        {latest
+          ? `Last checked ${new Date(latest.finished_at ?? latest.started_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+          : "Not reconciled yet"}
+      </p>
+    );
+  const name = (a: (typeof linked)[number]) =>
+    data.cards.find((c) => c.id === a.card_id)?.display_name ?? a.name;
+  return (
+    <p className="sync-status">
+      <span className={`state-dot ${behind.length ? "failed" : ""}`} />
+      {through ? `Synced through ${shortDate(through)}` : "Not synced yet"}
+      {behind.length > 0 && !compact && (
+        <span className="sync-behind">
+          {behind.map((a) => (
+            <Link key={a.id} href="/settings">
+              {name(a)}{" "}
+              {a.synced_through
+                ? `through ${shortDate(a.synced_through)}`
+                : "not synced"}
+            </Link>
+          ))}
+        </span>
+      )}
+      {behind.length > 0 && compact && (
+        <Link href="/settings" className="sync-behind-count">
+          {behind.length} behind
+        </Link>
+      )}
+    </p>
   );
 }
 function LockIcon() {

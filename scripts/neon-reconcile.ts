@@ -122,6 +122,21 @@ try {
     console.log(
       `${op}: ${result && typeof result === "object" && "id" in result ? `record ${String(result.id)}` : "done"}`,
     );
+    // classifyMemberships lists what it changed: benefit names and activation dates only.
+    if (Array.isArray(result?.classified))
+      console.table(
+        (
+          result.classified as {
+            name: string;
+            activated_on: string;
+            activation_assumed: boolean;
+          }[]
+        ).map((r) => ({
+          benefit: r.name,
+          activated_on: r.activated_on,
+          assumed: r.activation_assumed,
+        })),
+      );
   }
   if (importPath) {
     const imported = await importStatement(tx, {

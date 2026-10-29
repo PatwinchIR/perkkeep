@@ -8,6 +8,12 @@ import type {
 } from "./types";
 import { ruleById, type BenefitRule } from "./catalog";
 import {
+  isMembership,
+  membershipStatus,
+  membershipThrough,
+  notEnrolled,
+} from "./benefit-status";
+import {
   accountFreshness,
   activePeriod,
   coverageFresh,
@@ -263,12 +269,16 @@ export function deriveAlerts(input: AlertInput): Alert[] {
     alerts: Alert[] = [];
   const dayFor = (tz?: string | null) => localDate(now, tz ?? undefined);
   const archived = (p: Period) => !!cards.get(p.card_id)?.archived_at;
+  // A benefit the owner is not enrolled in, and a membership's period, never alert (rules 4, 11).
+  const quiet = (p: Period) =>
+    notEnrolled(p) || isMembership(benefits.get(p.benefit_id));
   const active = data.periods.filter(
     (p) =>
       activePeriod(p, benefits.get(p.benefit_id), now) &&
       p.enabled &&
       p.card_status === "active" &&
-      !archived(p),
+      !archived(p) &&
+      !quiet(p),
   );
   const recentCutoff = new Date(
     now.getTime() - activityDays * 86400000,
@@ -318,6 +328,30 @@ export function deriveAlerts(input: AlertInput): Alert[] {
     const day = dayFor(card.issuer_timezone);
     if (b.effective_from > day || (b.effective_to && b.effective_to <= day))
       continue;
+    if (notEnrolled(b)) continue;
+    // A membership alerts only when its window is about to close: to activate it in time, or
+    // because it is ending.
+    const through = isMembership(b) ? membershipThrough(b) : null;
+    if (through && through < shiftDays(day, leadDays) && through >= day) {
+      const activated = membershipStatus(b, day) === "active";
+      push({
+        ...base,
+        key: `membership:${b.id}:${through}:${activated ? "ending" : "activate"}`,
+        kind: "expiring",
+        group: "attention",
+        title: activated
+          ? `${b.name} ends ${dateLabel(through)}`
+          : `Activate ${b.name} by ${dateLabel(through)}`,
+        detail: activated
+          ? "Renew or replace it before then if you rely on it."
+          : "It is not activated yet, and the window to activate it closes soon.",
+        href: `/cards/${b.card_id}`,
+        cardId: b.card_id,
+        benefitId: b.id,
+        dismissible: true,
+        context: { through },
+      });
+    }
     const link = catalogLink(b),
       rule = link.id ? lookup(link.id) : undefined;
     if (link.id && !rule)
@@ -440,7 +474,14 @@ export function deriveAlerts(input: AlertInput): Alert[] {
   const candidateWindow = shiftDays(dayFor(), -45);
   for (const e of live) {
     const p = periods.get(e.benefit_period_id);
-    if (!p || !p.enabled || p.card_status !== "active" || archived(p)) continue;
+    if (
+      !p ||
+      !p.enabled ||
+      p.card_status !== "active" ||
+      archived(p) ||
+      quiet(p)
+    )
+      continue;
     if (
       e.confidence === "candidate" &&
       p.period_end_exclusive > candidateWindow
@@ -486,6 +527,7 @@ export function deriveAlerts(input: AlertInput): Alert[] {
       !p.enabled ||
       p.card_status !== "active" ||
       archived(p) ||
+      quiet(p) ||
       !fullyUsed(p)
     )
       continue;

@@ -4,11 +4,9 @@ import Link from "next/link";
 import {
   ArrowUpRight,
   BellRing,
-  CheckCheck,
   ClipboardCheck,
   Clock3,
   Plus,
-  Search,
   ShieldCheck,
   Smartphone,
   LogOut,
@@ -20,10 +18,34 @@ import { run, runSource } from "@/lib/api";
 import { RULE_FILES } from "@/lib/catalog";
 import { CardTile, Dialog, Empty, PageHeading } from "./ui";
 import { PeriodPanel } from "./period-panel";
-import { BenefitGroups } from "./benefit-row";
-import { AlertStack, useAlerts } from "./alerts";
-import { activity, attention } from "@/lib/alerts";
-import { AddCardForm, BenefitForm, CardForm, CoverageForm } from "./forms";
+import {
+  BenefitList,
+  CardChip,
+  EnrollmentChecklist,
+  SyncCaveat,
+  type ListSection,
+} from "./benefit-row";
+import { useAlerts } from "./alerts";
+import type { Alert } from "@/lib/alerts";
+import {
+  amountText,
+  enrollmentUnknown,
+  expiryGroups,
+  expiryHeading,
+  figures,
+  groupRows,
+  isMembership,
+  lastDay,
+  shortDate,
+} from "@/lib/benefit-status";
+import { reviewQueue, staleNote } from "@/lib/review";
+import {
+  AddCardForm,
+  BenefitForm,
+  CardForm,
+  CoverageForm,
+  manualReference,
+} from "./forms";
 import { SourcesPanel } from "./sources";
 import { CardArtPanel } from "./card-art";
 import { authClient } from "@/lib/auth-client";
@@ -31,24 +53,21 @@ import {
   activePeriod,
   cardEnding,
   CADENCES,
-  knownAvailable,
   localDate,
   money,
-  sortReview,
-  status,
 } from "@/lib/domain";
-import type { Benefit } from "@/lib/types";
+import type { Benefit, Evidence, Period } from "@/lib/types";
+import type { OperationInput } from "@/server/ledger";
 
-export function Dashboard() {
+export function HomeScreen() {
   const { data, refresh, notice, offline } = useApp(),
     alerts = useAlerts(),
     active = useActive(),
-    [issuer, setIssuer] = useState("all"),
-    [cardFilter, setCardFilter] = useState("all"),
-    [cadence, setCadence] = useState("all"),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
-  const current = active.periods.filter(
+  const now = new Date(),
+    today = localDate(now),
+    current = active.periods.filter(
       (p) =>
         activePeriod(
           p,
@@ -57,31 +76,17 @@ export function Dashboard() {
         p.enabled &&
         p.card_status === "active",
     ),
-    filtered = current.filter(
-      (p) =>
-        (issuer === "all" || p.issuer === issuer) &&
-        (cardFilter === "all" || p.card_id === cardFilter) &&
-        (cadence === "all" || p.cadence === cadence),
-    ),
-    eligible = filtered.filter(
-      (p) =>
-        p.eligibility_status === "eligible" &&
-        (!p.enrollment_required || p.enrollment_status === "active"),
-    ),
-    known = eligible
-      .map((p) => knownAvailable(p))
-      .filter((n): n is number => n !== null);
-  const monetary = eligible.filter((p) => p.allowance_cents !== null),
-    used = monetary.reduce((n, p) => n + p.confirmed_cents, 0),
-    candidates = monetary.reduce((n, p) => n + p.candidate_cents, 0);
-  const needs = attention(alerts),
-    recent = activity(alerts);
-  const cards = active.cards.filter(
-    (c) =>
-      (issuer === "all" || c.issuer === issuer) &&
-      (cardFilter === "all" || c.id === cardFilter) &&
-      (cadence === "all" || filtered.some((p) => p.card_id === c.id)),
-  );
+    queue = reviewQueue(data, alerts, now);
+  const sections: ListSection[] = expiryGroups(current, now).map((g) => ({
+    key: g.day,
+    title: expiryHeading(g.day, today),
+    summary:
+      g.remainingCents > 0
+        ? `${money(g.remainingCents)}${g.known ? "" : "?"} ${g.cards > 1 ? `across ${g.cards} cards` : "left"}`
+        : undefined,
+    rows: g.rows,
+  }));
+  const enrolling = queue.enrollment.reduce((n, e) => n + e.benefits.length, 0);
   async function setup() {
     setBusy(true);
     try {
@@ -97,168 +102,55 @@ export function Dashboard() {
   }
   return (
     <>
-      <PageHeading
-        eyebrow={new Intl.DateTimeFormat("en-US", {
-          month: "long",
-          year: "numeric",
-          timeZone: "America/New_York",
-        })
-          .format(new Date())
-          .toUpperCase()}
-        title="Good things, kept in view."
-        description="A little clarity for every benefit in your wallet."
-        action={
-          <Link className="secondary" href="/review">
-            Review benefits <ArrowUpRight size={16} />
-          </Link>
-        }
-      />
-      <div className="summary-grid">
-        <section className="summary-main">
-          <div className="summary-label">
-            KNOWN AVAILABLE{" "}
-            <span className="tiny-pill">
-              {known.length
-                ? "Your verified snapshot"
-                : "Awaiting verification"}
-            </span>
+      <header className="home-heading">
+        <h1>Use before it expires</h1>
+        <span>
+          {new Intl.DateTimeFormat("en-US", {
+            weekday: "short",
+            month: "short",
+            day: "numeric",
+            timeZone: "America/New_York",
+          }).format(now)}
+        </span>
+      </header>
+      {(queue.candidates.length > 0 || enrolling > 0) && (
+        <section className="needs-you" aria-labelledby="needs-you-title">
+          <div className="needs-you-heading">
+            <h2 id="needs-you-title" className="eyebrow">
+              Needs you
+            </h2>
+            <Link href="/review">Open review</Link>
           </div>
-          <div className="summary-value">
-            {known.length ? money(known.reduce((a, b) => a + b, 0)) : "—"}
-          </div>
-          <p>
-            {known.length
-              ? `Across ${known.length} ${known.length === 1 ? "benefit" : "benefits"} with verified eligibility and coverage`
-              : "Available value will appear after eligibility and coverage are verified."}
-          </p>
-          <div className="summary-bottom">
-            <ShieldCheck size={15} /> Candidates never reduce this balance.
-          </div>
+          {queue.candidates.length > 0 && (
+            <Link href="/review" className="needs-you-item">
+              <span>
+                {queue.candidates.length}{" "}
+                {queue.candidates.length === 1
+                  ? "purchase might be a benefit"
+                  : "purchases might be benefits"}
+              </span>
+              <span className="needs-you-action">Confirm</span>
+            </Link>
+          )}
+          {enrolling > 0 && (
+            <Link
+              href={
+                queue.enrollment.length === 1
+                  ? `/cards/${queue.enrollment[0].card.id}#enrollment`
+                  : "/review#enrollment"
+              }
+              className="needs-you-item"
+            >
+              <span>
+                {queue.enrollment.length === 1
+                  ? `Which ${queue.enrollment[0].card.display_name} perks are you enrolled in?`
+                  : `Enrollment for ${queue.enrollment.length} cards`}
+              </span>
+              <span className="needs-you-action">{enrolling} ›</span>
+            </Link>
+          )}
         </section>
-        <section className="summary-small">
-          <span className="metric-icon">
-            <CheckCheck size={20} />
-          </span>
-          <span>Confirmed used</span>
-          <strong>{monetary.length ? money(used) : "—"}</strong>
-          <small>Supported by recorded evidence</small>
-        </section>
-        <section className="summary-small">
-          <span className="metric-icon amber">
-            <Search size={20} />
-          </span>
-          <span>Potentially qualifying</span>
-          <strong>{monetary.length ? money(candidates) : "—"}</strong>
-          <small>Purchases awaiting confirmation</small>
-        </section>
-      </div>
-      <div className="section-heading">
-        <div>
-          <span className="eyebrow">NEEDS ATTENTION</span>
-          <h2>
-            Before anything else <span className="count">{needs.length}</span>
-          </h2>
-        </div>
-        <Link href="/review">
-          Review queue <ArrowUpRight size={15} />
-        </Link>
-      </div>
-      <AlertStack
-        alerts={needs}
-        limit={5}
-        moreHref="/review"
-        empty="Nothing needs your attention right now."
-      />
-      <div className="section-heading lower">
-        <div>
-          <span className="eyebrow">BY RESET WINDOW</span>
-          <h2>
-            Your benefits <span className="count">{filtered.length}</span>
-          </h2>
-        </div>
-        <Link href="/cards">
-          Manage cards <ArrowUpRight size={15} />
-        </Link>
-      </div>
-      <div className="filter-row">
-        <label>
-          <span className="sr-only">Filter by issuer</span>
-          <select
-            aria-label="Filter by issuer"
-            value={issuer}
-            onChange={(e) => setIssuer(e.target.value)}
-          >
-            <option value="all">All issuers</option>
-            {Array.from(new Set(active.cards.map((c) => c.issuer))).map((i) => (
-              <option key={i}>{i}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span className="sr-only">Filter by card</span>
-          <select
-            aria-label="Filter by card"
-            value={cardFilter}
-            onChange={(e) => setCardFilter(e.target.value)}
-          >
-            <option value="all">All cards</option>
-            {active.cards.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.display_name} · {cardEnding(c.last4)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span className="sr-only">Filter by timeframe</span>
-          <select
-            aria-label="Filter by timeframe"
-            value={cadence}
-            onChange={(e) => setCadence(e.target.value)}
-          >
-            <option value="all">All reset timeframes</option>
-            {Object.entries(CADENCES).map(([k, v]) => (
-              <option key={k} value={k}>
-                {v}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-      {filtered.length > 0 ? (
-        <BenefitGroups
-          periods={filtered}
-          benefits={data.benefits}
-          alerts={alerts}
-          showCard
-        />
-      ) : active.cards.length > 0 ? (
-        <div className="quiet-note">
-          <span className="metric-icon">
-            <Clock3 size={21} />
-          </span>
-          <div>
-            <strong>
-              {current.length
-                ? "No benefits in this view."
-                : "Your next opportunity starts with a verified benefit."}
-            </strong>
-            <p>
-              {current.length
-                ? "Try a different issuer, card or timeframe."
-                : "Open a card to confirm its details and add its researched benefits or your own from current issuer terms."}
-            </p>
-          </div>
-        </div>
-      ) : null}
-      <div className="section-heading lower">
-        <div>
-          <span className="eyebrow">THE EVERYDAY COLLECTION</span>
-          <h2>
-            Your cards <span className="count">{active.cards.length}</span>
-          </h2>
-        </div>
-      </div>
+      )}
       {data.cards.length === 0 ? (
         <Empty
           title="Let’s get your cards together."
@@ -276,20 +168,36 @@ export function Dashboard() {
           Business Preferred. Their identities and benefits stay unverified
           until you check them.
         </Empty>
-      ) : cards.length ? (
-        <div className="cards-grid">
-          {cards.map((c) => (
-            <CardTile
-              key={c.id}
-              card={c}
-              periods={filtered.filter((p) => p.card_id === c.id)}
-            />
-          ))}
-        </div>
       ) : (
-        <Empty title="No cards in this view.">
-          Try a different issuer or timeframe.
-        </Empty>
+        <BenefitList
+          sections={sections}
+          alerts={alerts}
+          showCard
+          empty={
+            <div className="quiet-note">
+              <span className="metric-icon">
+                <Clock3 size={21} />
+              </span>
+              <div>
+                <strong>
+                  {current.length
+                    ? "Nothing with value left is waiting on you."
+                    : "Your next opportunity starts with a verified benefit."}
+                </strong>
+                <p>
+                  {current.length ? (
+                    <>
+                      Used, not enrolled and membership benefits are on each
+                      card. <Link href="/cards">Open Cards</Link>
+                    </>
+                  ) : (
+                    "Open a card to confirm its details and add its researched benefits or your own from current issuer terms."
+                  )}
+                </p>
+              </div>
+            </div>
+          }
+        />
       )}
       {error && (
         <p className="form-error" role="alert">
@@ -304,23 +212,6 @@ export function Dashboard() {
           ))}
         </div>
       )}
-      <div className="section-heading lower">
-        <div>
-          <span className="eyebrow">LAST 30 DAYS</span>
-          <h2>
-            Recent use <span className="count">{recent.length}</span>
-          </h2>
-        </div>
-        <Link href="/history">
-          Full history <ArrowUpRight size={15} />
-        </Link>
-      </div>
-      <AlertStack
-        alerts={recent}
-        limit={6}
-        moreHref="/history"
-        empty="No confirmed use recorded in the last 30 days. Confirmed statement credits and amounts you enter will appear here."
-      />
     </>
   );
 }
@@ -393,12 +284,17 @@ export function CardScreen({ id }: { id: string }) {
     return (
       <Empty
         title="Card not found."
-        action={<Link href="/cards">Back to my cards</Link>}
+        action={<Link href="/cards">Back to cards</Link>}
       >
         This card is unavailable to your account.
       </Empty>
     );
-  const benefits = data.benefits.filter((b) => b.card_id === id),
+  const today = localDate(new Date(), card.issuer_timezone),
+    benefits = data.benefits.filter((b) => b.card_id === id),
+    current = (b: Benefit) =>
+      b.enabled &&
+      b.effective_from <= today &&
+      (!b.effective_to || b.effective_to > today),
     periods = data.periods.filter(
       (p) =>
         p.card_id === id &&
@@ -406,7 +302,27 @@ export function CardScreen({ id }: { id: string }) {
           p,
           benefits.find((b) => b.id === p.benefit_id),
         ),
-    );
+    ),
+    memberships = benefits
+      .filter((b) => isMembership(b) && current(b))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    unanswered = benefits.filter((b) => current(b) && enrollmentUnknown(b));
+  const sections: ListSection[] = groupRows(periods).map((g) => ({
+    key: g.cadence,
+    title: g.label,
+    summary: [
+      g.allowanceCents > 0 &&
+        `${money(g.confirmedCents)} of ${money(g.allowanceCents)} used`,
+      g.endsOn && `next reset ${shortDate(g.endsOn)}`,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    rows: g.rows,
+    folds: [
+      { key: "done", label: "Done this period", rows: g.done },
+      { key: "not-enrolled", label: "Not enrolled", rows: g.notEnrolled },
+    ],
+  }));
   const researched = RULE_FILES.find(
       (f) => f.researched && f.catalog_key === card.catalog_key,
     ),
@@ -497,7 +413,9 @@ export function CardScreen({ id }: { id: string }) {
     setBusy(false);
   }
   const others = benefits.filter(
-    (b) => !periods.some((p) => p.benefit_id === b.id),
+    (b) =>
+      !(isMembership(b) && current(b)) &&
+      !periods.some((p) => p.benefit_id === b.id),
   );
   const ruleActions = (b: Benefit) => (
     <>
@@ -540,32 +458,39 @@ export function CardScreen({ id }: { id: string }) {
       )}
     </>
   );
+  const count = periods.length + memberships.length;
   return (
     <>
       <Link className="back-link" href="/cards">
-        ← My cards
+        ← Cards
       </Link>
-      <PageHeading
-        eyebrow={`${card.issuer} · ${cardEnding(card.last4)}`}
-        title={card.display_name}
-        description={
-          card.product_name ??
-          "This card’s product still needs to be identified."
-        }
-        action={
-          <button
-            className="secondary"
-            disabled={offline}
-            onClick={() => setModal("card")}
-          >
+      <header className="card-heading">
+        <CardChip card={card} />
+        <div>
+          <span className="eyebrow">
+            {card.issuer} · {cardEnding(card.last4)}
+          </span>
+          <h1>{card.display_name}</h1>
+          <p>
             {card.identity_verified_at
-              ? "Edit card details"
-              : "Confirm card identity"}{" "}
-            <ArrowUpRight size={16} />
-          </button>
-        }
-      />
-      <CardArtPanel card={card} />
+              ? `${count} ${count === 1 ? "benefit" : "benefits"}`
+              : (card.product_name ??
+                "This card’s product still needs to be identified.")}
+            {card.cardmember_anchor_date &&
+              ` · year resets ${shortDate(card.cardmember_anchor_date)}`}
+          </p>
+        </div>
+        <button
+          className="secondary"
+          disabled={offline}
+          onClick={() => setModal("card")}
+        >
+          {card.identity_verified_at
+            ? "Edit card details"
+            : "Confirm card identity"}{" "}
+          <ArrowUpRight size={16} />
+        </button>
+      </header>
       {card.archived_at && (
         <div className="notice">
           <strong>This card was removed.</strong>
@@ -591,26 +516,12 @@ export function CardScreen({ id }: { id: string }) {
           </p>
         </div>
       )}
-      <div className="section-heading">
-        <h2>
-          Benefits <span className="count">{periods.length}</span>
-        </h2>
-        <button
-          className="primary"
-          disabled={
-            !card.identity_verified_at ||
-            card.status !== "active" ||
-            !!card.archived_at ||
-            offline
-          }
-          onClick={() => {
-            setPrevious(undefined);
-            setModal("benefit");
-          }}
-        >
-          <Plus size={16} /> Add benefit
-        </button>
-      </div>
+      {card.identity_verified_at &&
+        !card.archived_at &&
+        benefits.length > 0 && <SyncCaveat card={card} />}
+      {!card.archived_at && (
+        <EnrollmentChecklist card={card} benefits={unanswered} />
+      )}
       {card.identity_verified_at &&
         card.status === "active" &&
         missing.length > 0 && (
@@ -639,41 +550,51 @@ export function CardScreen({ id }: { id: string }) {
           card’s name alone.
         </Empty>
       ) : (
-        <>
-          <BenefitGroups
-            periods={periods}
-            benefits={benefits}
-            alerts={alerts.filter((a) => a.cardId === id)}
-            actions={ruleActions}
-          />
-          {others.length > 0 && (
-            <section className="cadence-group">
-              <header className="cadence-group-heading">
-                <h2>
-                  Rules without a current period{" "}
-                  <span className="count">{others.length}</span>
-                </h2>
-              </header>
-              {others.map((b) => (
-                <div className="rule-without-period" key={b.id}>
-                  <strong>
-                    {b.name} · {CADENCES[b.cadence as keyof typeof CADENCES]}
-                  </strong>
-                  <span>
-                    {!b.enabled
-                      ? "Paused"
-                      : b.effective_to && b.effective_to <= localDate()
-                        ? "Previous rule version"
-                        : "Period not established — check reset dates and eligibility"}
-                  </span>
-                  <div className="rule-actions">{ruleActions(b)}</div>
-                </div>
-              ))}
-            </section>
-          )}
-        </>
+        <BenefitList
+          sections={sections}
+          memberships={memberships}
+          alerts={alerts.filter((a) => a.cardId === id)}
+          ruleActions={ruleActions}
+        />
       )}
-      {benefits.some((b) => b.enabled) && (
+      {others.length > 0 && (
+        <details className="history-tool">
+          <summary>Paused and earlier rules ({others.length})</summary>
+          {others.map((b) => (
+            <div className="rule-without-period" key={b.id}>
+              <strong>
+                {b.name} · {CADENCES[b.cadence as keyof typeof CADENCES]}
+              </strong>
+              <span>
+                {!b.enabled
+                  ? "Paused"
+                  : b.effective_to && b.effective_to <= localDate()
+                    ? "Previous rule version"
+                    : "Period not established — check reset dates and eligibility"}
+              </span>
+              <div className="rule-actions">{ruleActions(b)}</div>
+            </div>
+          ))}
+        </details>
+      )}
+      <div className="card-tools">
+        <button
+          className="secondary"
+          disabled={
+            !card.identity_verified_at ||
+            card.status !== "active" ||
+            !!card.archived_at ||
+            offline
+          }
+          onClick={() => {
+            setPrevious(undefined);
+            setModal("benefit");
+          }}
+        >
+          <Plus size={16} /> Add benefit
+        </button>
+      </div>
+      {benefits.some((b) => b.enabled && !isMembership(b)) && (
         <details className="history-tool">
           <summary>Open a period for an earlier date</summary>
           <p>
@@ -685,7 +606,7 @@ export function CardScreen({ id }: { id: string }) {
               Benefit
               <select name="benefit">
                 {benefits
-                  .filter((b) => b.enabled)
+                  .filter((b) => b.enabled && !isMembership(b))
                   .map((b) => (
                     <option key={b.id} value={b.id}>
                       {b.name} · from {b.effective_from}
@@ -715,6 +636,7 @@ export function CardScreen({ id }: { id: string }) {
           ))}
         </div>
       )}
+      <CardArtPanel card={card} />
       {!card.archived_at && (
         <div className="settings-signout">
           <button
@@ -765,58 +687,289 @@ export function CardScreen({ id }: { id: string }) {
 export function ReviewScreen() {
   const { data } = useApp(),
     alerts = useAlerts(),
-    needs = attention(alerts),
-    active = useActive();
-  const periods = active.periods
-    .filter(
-      (p) =>
-        activePeriod(
-          p,
-          data.benefits.find((b) => b.id === p.benefit_id),
-        ) &&
-        p.enabled &&
-        p.card_status === "active" &&
-        p.eligibility_status !== "ineligible" &&
-        (status(p) === "candidate" || status(p) === "needs_review"),
-    )
-    .sort(sortReview);
+    queue = reviewQueue(data, alerts);
   return (
     <>
       <PageHeading
-        eyebrow="A LITTLE ATTENTION GOES A LONG WAY"
-        title="Your review queue."
-        description="Everything that needs a decision, ordered by urgency. You make the final call."
+        eyebrow="REVIEW"
+        title="Review"
+        description="Only what PerkKeep cannot decide alone. Empty is the goal."
       />
-      <div className="section-heading">
-        <h2>
-          Needs attention <span className="count">{needs.length}</span>
-        </h2>
-      </div>
-      <AlertStack
-        alerts={needs}
-        empty="Nothing needs your attention right now."
-      />
-      <div className="section-heading lower">
-        <h2>
-          Benefits to review <span className="count">{periods.length}</span>
-        </h2>
-      </div>
-      {periods.length ? (
-        <BenefitGroups
-          periods={periods}
-          benefits={data.benefits}
-          alerts={alerts}
-          showCard
-          initialOpen
-        />
-      ) : (
-        <Empty title="No benefit reviews waiting.">
-          {data.benefits.length
-            ? "Candidate evidence and unconfirmed details will show up here."
-            : "Add verified benefit rules to begin. Missing data is never treated as an unused balance."}
+      {queue.count === 0 && queue.stale.length === 0 && (
+        <Empty title="Nothing to review.">
+          Purchases that may be a benefit, benefits ending with no evidence, and
+          enrollment questions will show up here.
         </Empty>
       )}
+      {queue.candidates.length > 0 && (
+        <section className="review-section" aria-labelledby="review-candidates">
+          <h2 id="review-candidates">Was this purchase a benefit?</h2>
+          {queue.candidates.map((c) => (
+            <CandidateItem key={c.evidence.id} {...c} />
+          ))}
+        </section>
+      )}
+      {(queue.endingSoon.length > 0 || queue.stale.length > 0) && (
+        <section className="review-section" aria-labelledby="review-ending">
+          <h2 id="review-ending">Ending soon with no evidence</h2>
+          {queue.endingSoon.length > 0 && (
+            <ul className="review-list">
+              {queue.endingSoon.map((e) => (
+                <EndingItem key={e.alert.key} {...e} />
+              ))}
+            </ul>
+          )}
+          {queue.stale.map((s) => (
+            <p className="review-note" key={s.card.id}>
+              {staleNote(s)}{" "}
+              <Link
+                href={s.accounts.length ? "/settings" : `/cards/${s.card.id}`}
+              >
+                {s.accounts.length
+                  ? `Fix the ${s.card.display_name} connection`
+                  : "Open the card"}
+              </Link>
+            </p>
+          ))}
+        </section>
+      )}
+      {queue.enrollment.length > 0 && (
+        <section
+          className="review-section"
+          id="enrollment"
+          aria-labelledby="review-enrollment"
+        >
+          <h2 id="review-enrollment">Enrollment</h2>
+          {queue.enrollment.map((e) => (
+            <Link
+              key={e.card.id}
+              href={`/cards/${e.card.id}#enrollment`}
+              className="review-link"
+            >
+              <span>
+                {e.card.display_name}: {e.benefits.length}{" "}
+                {e.benefits.length === 1 ? "perk needs" : "perks need"} an
+                answer
+              </span>
+              <span className="review-link-action">Answer ›</span>
+            </Link>
+          ))}
+        </section>
+      )}
     </>
+  );
+}
+
+// A purchase the matcher proposed (rule 8): the transaction, the benefit it may be, and Yes or
+// Not this. Yes appends a confirmation that supersedes the candidate, capped at what is left;
+// Not this appends a rejection. The candidate itself stays in History.
+function CandidateItem({
+  evidence,
+  period,
+}: {
+  evidence: Evidence;
+  period: Period;
+}) {
+  const { refresh, notice, offline } = useApp(),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
+  const f = figures(period),
+    units = f.allowance !== null && period.allowance_units !== null,
+    spent = (units ? evidence.units : evidence.amount_cents) ?? 0,
+    count =
+      f.remaining && f.remaining > 0 ? Math.min(spent, f.remaining) : spent,
+    show = (n: number | null) => (units ? `${n ?? 0} units` : money(n ?? 0));
+  async function answer(yes: boolean) {
+    setBusy(true);
+    setError("");
+    try {
+      const id = crypto.randomUUID();
+      await run(
+        "recordEvidence",
+        yes
+          ? {
+              id,
+              benefit_period_id: period.id,
+              source_type: "manual",
+              source_reference_hash: await manualReference(id),
+              transaction_date: evidence.transaction_date,
+              merchant: evidence.merchant,
+              amount_cents: units ? null : count,
+              units: units ? count : null,
+              eligibility_result: "eligible",
+              confirmation_result: "Owner confirmed in Review",
+              confidence: "confirmed",
+              notes:
+                "Owner confirmed in Review that this purchase used the benefit.",
+              supersedes_evidence_id: evidence.id,
+            }
+          : {
+              id,
+              benefit_period_id: period.id,
+              source_type:
+                evidence.source_type as OperationInput<"recordEvidence">["source_type"],
+              transaction_date: evidence.transaction_date,
+              amount_cents: evidence.amount_cents,
+              units: evidence.units,
+              confidence: "rejected",
+              eligibility_result: "ineligible",
+              notes: "Owner answered in Review: not this benefit.",
+              supersedes_evidence_id: evidence.id,
+            },
+      );
+      await refresh();
+      notice(
+        yes
+          ? `${show(count)} counted toward ${period.benefit_name}.`
+          : "Marked as not this benefit. The purchase stays in History.",
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save.");
+      setBusy(false);
+    }
+  }
+  return (
+    <article className="review-item">
+      <div className="review-item-heading">
+        <h3>
+          {evidence.merchant ?? evidence.source_type.replaceAll("_", " ")}
+        </h3>
+        <span className="num">{show(spent)}</span>
+      </div>
+      <p>
+        {shortDate(evidence.transaction_date)} · {period.card_name} · matches{" "}
+        <strong>{period.benefit_name}</strong>
+        {f.remaining !== null && f.allowance !== null
+          ? ` (${show(f.remaining)} of ${show(f.allowance)} left)`
+          : ""}
+      </p>
+      {evidence.notes && <p>{evidence.notes}</p>}
+      {error && (
+        <p role="alert" className="form-error">
+          {error}
+        </p>
+      )}
+      <div className="review-item-actions">
+        <button
+          className="primary"
+          disabled={busy || offline}
+          onClick={() => void answer(true)}
+        >
+          Yes, count {show(count)}
+        </button>
+        <button
+          className="secondary"
+          disabled={busy || offline}
+          onClick={() => void answer(false)}
+        >
+          Not this
+        </button>
+      </div>
+    </article>
+  );
+}
+
+// A window ending soon with fresh coverage and nothing used: Used it records the remaining amount
+// as the owner's own confirmation; Skip dismisses the alert until its facts change. A membership
+// whose window closes soon has only Skip and a link to its card.
+function EndingItem({
+  alert,
+  period,
+}: {
+  alert: Alert;
+  period: Period | null;
+}) {
+  const { refresh, notice, offline } = useApp(),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
+  const f = period ? figures(period) : null,
+    units = !!period && period.allowance_units !== null;
+  async function act(fn: () => Promise<unknown>, done: string) {
+    setBusy(true);
+    setError("");
+    try {
+      await fn();
+      await refresh();
+      notice(done);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save.");
+      setBusy(false);
+    }
+  }
+  async function usedIt() {
+    if (!period || !f?.remaining) return;
+    const id = crypto.randomUUID(),
+      today = localDate(new Date(), period.issuer_timezone);
+    await act(
+      async () =>
+        run("recordEvidence", {
+          id,
+          benefit_period_id: period.id,
+          source_type: "manual",
+          source_reference_hash: await manualReference(id),
+          transaction_date: today,
+          merchant: null,
+          amount_cents: units ? null : f.remaining,
+          units: units ? f.remaining : null,
+          eligibility_result: "eligible",
+          confirmation_result: "Owner entered the amount used",
+          confidence: "confirmed",
+          notes: "Owner marked it used in Review.",
+          supersedes_evidence_id: null,
+        }),
+      `${period.benefit_name} recorded as used.`,
+    );
+  }
+  return (
+    <li className="review-row">
+      <div>
+        <span className="review-row-name">
+          {period?.benefit_name ?? alert.title}
+          {period && (
+            <span className="benefit-line-card"> · {period.card_name}</span>
+          )}
+        </span>
+        <span className="review-row-meta">
+          {period && f
+            ? `${amountText(period, "available")} · ends ${shortDate(lastDay(period))}`
+            : alert.detail}
+        </span>
+        {error && (
+          <span role="alert" className="form-error">
+            {error}
+          </span>
+        )}
+      </div>
+      {period ? (
+        <button
+          className="secondary"
+          disabled={busy || offline}
+          onClick={() => void usedIt()}
+        >
+          Used it
+        </button>
+      ) : (
+        <Link href={alert.href} className="secondary">
+          Open card
+        </Link>
+      )}
+      <button
+        className="quiet-button"
+        disabled={busy || offline}
+        onClick={() =>
+          void act(
+            () =>
+              run("acknowledgeAlert", {
+                alert_key: alert.key,
+                context: alert.context,
+              }),
+            "Skipped. It returns if anything changes.",
+          )
+        }
+      >
+        Skip
+      </button>
+    </li>
   );
 }
 
