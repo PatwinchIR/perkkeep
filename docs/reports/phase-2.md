@@ -84,5 +84,12 @@ D45 to D50 in [decisions.md](../decisions.md): derived alerts with append-only a
 
 - Dates from transactions: the Sapphire Reserve $75,000 tier (The Shops at Chase credit, Southwest $500 credit, Southwest A-List, World of Hyatt Explorist, IHG Diamond Elite) starts 2026-10-23, when recorded 2026 purchases passed $75,000. The Shops at Chase credit of $250 on 2026-10-26 confirms it and is now matched as fully used. If spend is missing from the history (August 2026 shows little), the true start is earlier; the end dates do not change.
 - Assumed dates (2026-10-28, need the owner's confirmation): Global Entry, TSA PreCheck or NEXUS credit (window to 2030-10-28); Apple TV and Apple Music (to 2027-10-28); DashPass (to 2030-01-01); IHG Platinum Elite (to 2028-01-01).
-- Not added: Gold's Hotel Collection credit and the six-month DashPass on both Freedom cards (custom windows outside Sapphire Reserve), and Ink Business Preferred's welcome offer (one-time, so it waits for the owner to match the approval terms).
+- Not added: Gold's Hotel Collection credit and the six-month DashPass on both Freedom cards (custom windows outside Sapphire Reserve). Ink Business Preferred's welcome offer waited for the owner to match the approval terms; it was added later the same day (next section).
 - The monthly terms-check task from [maintenance](../maintenance.md) was created as a desktop app task on the owner's Mac. Its prompt assumes a cloud session (`add_repo`, `/home/claude`), so the first run on 2026-11-01 should be watched.
+
+## Owner confirmations applied (2026-10-28, fourth session)
+
+- The owner identified the unidentified Chase business account as Ink Business Cash. Its SimpleFIN account and Copilot export were already linked to the Ink Business Cash card, so no mapping changed.
+- The owner confirmed that the Ink Business Preferred approval terms match the recorded welcome offer. `createBenefit` added it to the confirmed Ink Business Preferred card: 100,000 points after $8,000 of purchases, a one-time window from 2026-10-27 (the card's anchor date, the account opening) to 2027-01-27. `ensurePeriod` opened the period. Ink Business Preferred now has 2 benefits.
+- `archiveCard` archived the "Identify this card" placeholder and the unconfirmed duplicate Ink Business Preferred starter card. Both were empty, and `restoreCard` reverses it.
+- Everything ran through `npm run neon:reconcile -- --op ...` as `perkkeep_app` with the owner's identity, after a dry run.
