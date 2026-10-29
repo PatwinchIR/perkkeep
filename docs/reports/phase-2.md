@@ -93,3 +93,30 @@ D45 to D50 in [decisions.md](../decisions.md): derived alerts with append-only a
 - The owner confirmed that the Ink Business Preferred approval terms match the recorded welcome offer. `createBenefit` added it to the confirmed Ink Business Preferred card: 100,000 points after $8,000 of purchases, a one-time window from 2026-10-27 (the card's anchor date, the account opening) to 2027-01-27. `ensurePeriod` opened the period. Ink Business Preferred now has 2 benefits.
 - `archiveCard` archived the "Identify this card" placeholder and the unconfirmed duplicate Ink Business Preferred starter card. Both were empty, and `restoreCard` reverses it.
 - Everything ran through `npm run neon:reconcile -- --op ...` as `perkkeep_app` with the owner's identity, after a dry run.
+
+## Benefits list redesign (2026-10-28, fifth session)
+
+- PatwinchIR/perkkeep#11 (the spec, `docs/design-benefits-page.md`) and PatwinchIR/perkkeep#12 (the implementation) were merged to `main`, and Vercel deployed production at merge commit `0a5dfd3`. Decisions D56 to D59.
+- Tests on a local PostgreSQL 16:
+  - `npm test`: 98/98. New: `tests/benefit-status.test.ts` (status, amounts, grouping, membership alerts, Review queue) and `tests/memberships.test.ts` (migration 0006 constraints and the `classifyMemberships`, `setActivation` and `saveEnrollment` operations).
+  - Playwright `chromium-desktop` and `chromium-phone`: 28/28, with 4 security tests skipped on phone by design. New tests: rows collapsed by default, one expanded row at a time, Used rows and memberships without an amount form, and the enrollment checklist appearing once, disappearing after Save and leaving Not enrolled rows without alerts.
+  - typecheck, lint, build and check:client all pass. WebKit was not run.
+- Production:
+  - `npm run neon:migrate` applied `0006_memberships.sql` before the merge (D59).
+  - A dry run of `classifyMemberships` across all cards also listed Freedom Flex's "5% quarterly bonus category activation". The real run was therefore scoped to Sapphire Reserve's card id, passed in a scratch input file, and ran through `neon:reconcile` as `perkkeep_app`.
+
+| Benefit                                | Activated on | Assumed               |
+| -------------------------------------- | ------------ | --------------------- |
+| Priority Pass Select lounge membership | 2026-01-01   | yes                   |
+| Apple TV and Apple Music subscriptions | 2026-10-28   | yes                   |
+| DoorDash DashPass membership           | 2026-10-28   | yes                   |
+| IHG One Rewards Platinum Elite status  | 2026-10-28   | yes                   |
+| Southwest Airlines A-List status       | 2026-10-23   | no (owner's spending) |
+| World of Hyatt Explorist status        | 2026-10-23   | no (owner's spending) |
+| IHG One Rewards Diamond Elite status   | 2026-10-23   | no (owner's spending) |
+
+- Check against production data, done as `perkkeep_app` with the deployed code's functions and rolled back:
+  - Sapphire Reserve has 17 enabled benefits: 10 allowance rows and 7 memberships, with none missing.
+  - The Shops at Chase credit and the annual travel credit are Used, so they show no form.
+  - The other 8 allowance rows read Unknown ("$35?" style), because the card's synced coverage is not fresh. The sync caveat line says so.
+  - The signed-in page itself was not opened, because it needs the owner's sign-in.
