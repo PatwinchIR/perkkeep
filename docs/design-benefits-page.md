@@ -30,6 +30,13 @@ Observed on 2026-10-28 on the Sapphire Reserve page (17 benefits): every row is 
 
 10. **Numbers.** Never show `$0 of $35 · $35 unconfirmed`. The amount is either known (`$35 left`) or not (`$35?`). "Unconfirmed" is never an amount.
 
+11. **Benefits without an amount are memberships, not allowances.** Apple TV and Apple Music, DashPass, Priority Pass, IHG and Hyatt status, Southwest A-List and lounge access have nothing to spend down. Observed 2026-10-28: the Apple TV row shows "Allowance not established", demands an amount in a required field, and offers "Mark used" and "Confirm redemption", none of which can be answered. Rules for this kind:
+    - A rule with neither `amount_cents` nor `units` is a `membership`. It has no allowance, no progress bar, no "Mark used" form, no "Confirm the allowance" alert, and never counts toward a group's "$X of $Y used" line.
+    - Its row reads `Active · through Jun 22, 2027` (end of the activation window or the benefit's end date) or `Not activated`. The only inputs are an activation date and the enrollment toggle; the activation date defaults to assumed and shows `(assumed)` until the owner sets it.
+    - Its only alerts are: activation deadline approaching when not activated, and the benefit's own end date approaching.
+    - Memberships sit in one group, "Status and access", at the bottom of the card page, collapsed into one line that lists them by name.
+    - Implementation note: `addResearchedBenefits` should insert these without an allowance rather than skipping them; the current skip exists only because every benefit was assumed to have an amount.
+
 ## Acceptance
 
 The Sapphire Reserve page with 17 benefits fits in two phone screens when collapsed, with every row answering "how much is left and when it ends" in one line, and the only chips visible are `Review` on rows with a waiting candidate. The existing alert engine (`src/lib/alerts.ts`) is unchanged; only the presentation changes. Browser tests cover: collapsed by default, one row expanded at a time, enrollment checklist appears once and disappears after Save, `Not enrolled` rows stop producing alerts.
