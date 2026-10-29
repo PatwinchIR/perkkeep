@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Web: list on the left, detail on the right</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#26372e;background:#f6f5f1}
+a{color:#344e3f;text-decoration:none}a:hover{color:#233c2e}
+.num{font-variant-numeric:tabular-nums}
+</style>
+</helmet>
+<div style="width: 1280px; height: 820px; box-sizing: border-box; background: #f6f5f1; display: flex; overflow: hidden">
+
+  <nav aria-label="Main" style="width: 200px; flex: none; border-right: 1px solid #e1e4dc; background: #fffefa; padding: 28px 16px; display: flex; flex-direction: column; gap: 4px">
+    <div style="font-size: 22px; font-weight: 600; letter-spacing: -0.01em; padding: 0 12px 20px 12px">perkkeep.</div>
+    <a href="Web.dc.html" aria-current="page" style="display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 12px; border-radius: 8px; background: #e5ecd9; font-size: 14px; font-weight: 600; color: #26372e">Home</a>
+    <a href="Card.dc.html" style="display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 12px; border-radius: 8px; font-size: 14px; color: #586454">Cards</a>
+    <a href="Review.dc.html" style="display: flex; align-items: center; justify-content: space-between; min-height: 40px; padding: 0 12px; border-radius: 8px; font-size: 14px; color: #586454">Review <span style="min-width: 20px; height: 20px; border-radius: 999px; background: #af8650; color: #ffffff; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center">2</span></a>
+    <a href="Web.dc.html" style="display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 12px; border-radius: 8px; font-size: 14px; color: #586454">History</a>
+    <a href="Web.dc.html" style="display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 12px; border-radius: 8px; font-size: 14px; color: #586454">Settings</a>
+    <div style="flex: 1"></div>
+    <div style="font-size: 12px; color: #586454; padding: 0 12px; line-height: 1.5">Synced through Oct 27<br><a href="Web.dc.html" style="color: #6b5524">Gold through Aug 6</a></div>
+  </nav>
+
+  <main style="flex: 1; display: flex; min-width: 0">
+
+    <section aria-label="Use before it expires" style="width: 520px; flex: none; padding: 32px 28px; display: flex; flex-direction: column; gap: 16px; overflow: hidden; border-right: 1px solid #e1e4dc">
+      <div style="display: flex; justify-content: space-between; align-items: baseline">
+        <h1 style="margin: 0; font-size: 28px; font-weight: 500; letter-spacing: -0.01em">Use before it expires</h1>
+        <div style="font-size: 12px; color: #586454">Wed, Oct 28</div>
+      </div>
+
+      <div style="display: flex; gap: 8px">
+        <a href="Review.dc.html" style="flex: 1; display: flex; align-items: center; justify-content: space-between; min-height: 44px; padding: 0 14px; background: #fffefa; border: 1px solid #e1e4dc; border-radius: 10px; font-size: 13px; color: #26372e">2 purchases might be benefits <span style="font-weight: 600; color: #344e3f">Confirm ›</span></a>
+        <a href="Card.dc.html" style="flex: 1; display: flex; align-items: center; justify-content: space-between; min-height: 44px; padding: 0 14px; background: #fffefa; border: 1px solid #e1e4dc; border-radius: 10px; font-size: 13px; color: #26372e">6 Reserve perks: enrolled? <span style="font-weight: 600; color: #344e3f">Answer ›</span></a>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; padding: 0 4px">
+          <div style="font-size: 16px; font-weight: 500">Ending Friday</div>
+          <div class="num" style="font-size: 12px; color: #586454">$92 across 4 cards</div>
+        </div>
+        <div style="background: #fffefa; border: 1px solid #e1e4dc; border-radius: 12px; display: flex; flex-direction: column">
+          <a href="#dd" style="display: flex; align-items: center; gap: 12px; padding: 0 14px; min-height: 44px; border-bottom: 1px solid #e1e4dc; color: #26372e; background: #eff0e9">
+            <span aria-hidden="true" style="width: 22px; height: 14px; border-radius: 3px; background: #1d2a44; flex: none"></span>
+            <span style="flex: 1; font-size: 14px; font-weight: 600">DoorDash promos <span style="font-weight: 400; color: #586454; font-size: 12px">· Reserve</span></span>
+            <span class="num" style="font-size: 14px">$35 left</span>
+          </a>
+          <a href="#lyft" style="display: flex; align-items: center; gap: 12px; padding: 0 14px; min-height: 44px; border-bottom: 1px solid #e1e4dc; color: #26372e">
+            <span aria-hidden="true" style="width: 22px; height: 14px; border-radius: 3px; background: #1d2a44; flex: none"></span>
+            <span style="flex: 1; font-size: 14px">Lyft ride credit <span style="color: #586454; font-size: 12px">· Reserve</span></span>
+            <span class="num" style="font-size: 14px">$10 left</span>
+          </a>
+          <a href="#inst" style="display: flex; align-items: center; gap: 12px; padding: 0 14px; min-height: 44px; border-bottom: 1px solid #e1e4dc; color: #26372e">
+            <span aria-hidden="true" style="width: 22px; height: 14px; border-radius: 3px; background: #8e9299; flex: none"></span>
+            <span style="flex: 1; font-size: 14px">Instacart credit <span style="color: #586454; font-size: 12px">· Ink Cash</span></span>
+            <span class="num" style="font-size: 14px">$20 left</span>
+          </a>
+          <a href="#dine" style="display: flex; align-items: center; gap: 12px; padding: 0 14px; min-height: 44px; border-bottom: 1px solid #e1e4dc; color: #26372e">
+            <span aria-hidden="true" style="width: 22px; height: 14px; border-radius: 3px; background: #d6bf82; flex: none"></span>
+            <span style="flex: 1; font-size: 14px">Dining credit <span style="color: #586454; font-size: 12px">· Gold</span></span>
+            <span class="num" style="font-size: 14px">$10<span style="color: #6b5524">?</span></span>
+          </a>
+          <a href="#uber" style="display: flex; align-items: center; gap: 12px; padding: 0 14px; min-height: 44px; border-bottom: 1px solid #e1e4dc; color: #26372e">
+            <span aria-hidden="true" style="width: 22px; height: 14px; border-radius: 3px; background: #d6bf82; flex: none"></span>
+            <span style="flex: 1; font-size: 14px">Uber Cash <span style="color: #586454; font-size: 12px">· Gold</span></span>
+            <span class="num" style="font-size: 14px">$10<span style="color: #6b5524">?</span></span>
+          </a>
+          <a href="#dunk" style="display: flex; align-items: center; gap: 12px; padding: 0 14px; min-height: 44px; color: #26372e">
+            <span aria-hidden="true" style="width: 22px; height: 14px; border-radius: 3px; background: #d6bf82; flex: none"></span>
+            <span style="flex: 1; font-size: 14px">Dunkin' credit <span style="color: #586454; font-size: 12px">· Gold</span></span>
+            <span class="num" style="font-size: 14px">$7<span style="color: #6b5524">?</span></span>
+          </a>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; padding: 0 4px">
+          <div style="font-size: 16px; font-weight: 500">By Dec 31</div>
+          <div class="num" style="font-size: 12px; color: #586454">$1,050 left</div>
+        </div>
+        <div style="background: #fffefa; border: 1px solid #e1e4dc; border-radius: 12px; display: flex; flex-direction: column">
+          <a href="#edit" style="display: flex; align-items: center; gap: 12px; padding: 0 14px; min-height: 44px; border-bottom: 1px solid #e1e4dc; color: #26372e">
+            <span aria-hidden="true" style="width: 22px; height: 14px; border-radius: 3px; background: #1d2a44; flex: none"></span>
+            <span style="flex: 1; font-size: 14px">The Edit hotel credit <span style="color: #586454; font-size: 12px">· Reserve</span></span>
+            <span class="num" style="font-size: 14px">$500 left</span>
+          </a>
+          <a href="#sw" style="display: flex; align-items: center; gap: 12px; padding: 0 14px; min-height: 44px; border-bottom: 1px solid #e1e4dc; color: #26372e">
+            <span aria-hidden="true" style="width: 22px; height: 14px; border-radius: 3px; background: #1d2a44; flex: none"></span>
+            <span style="flex: 1; font-size: 14px">Southwest credit <span style="color: #586454; font-size: 12px">· Reserve · $75k tier</span></span>
+            <span class="num" style="font-size: 14px">$500 left</span>
+          </a>
+          <a href="#resy" style="display: flex; align-items: center; gap: 12px; padding: 0 14px; min-height: 44px; color: #26372e">
+            <span aria-hidden="true" style="width: 22px; height: 14px; border-radius: 3px; background: #d6bf82; flex: none"></span>
+            <span style="flex: 1; font-size: 14px">Resy credit <span style="color: #586454; font-size: 12px">· Gold</span></span>
+            <span class="num" style="font-size: 14px">$50<span style="color: #6b5524">?</span></span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section aria-label="Selected benefit" style="flex: 1; padding: 32px 36px; display: flex; flex-direction: column; gap: 20px; min-width: 0">
+      <div style="display: flex; align-items: center; gap: 14px">
+        <div aria-hidden="true" style="width: 56px; height: 36px; border-radius: 5px; background: #1d2a44; flex: none"></div>
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <div style="font-size: 12px; color: #586454">Sapphire Reserve · Monthly</div>
+          <h2 style="margin: 0; font-size: 22px; font-weight: 500">DoorDash promos</h2>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 32px">
+        <div style="display: flex; flex-direction: column; gap: 2px"><div style="font-size: 12px; color: #586454">Left this month</div><div class="num" style="font-size: 28px">$35</div></div>
+        <div style="display: flex; flex-direction: column; gap: 2px"><div style="font-size: 12px; color: #586454">Ends</div><div style="font-size: 28px">Fri, Oct 31</div></div>
+        <div style="display: flex; flex-direction: column; gap: 2px"><div style="font-size: 12px; color: #586454">Used this year</div><div class="num" style="font-size: 28px">$70 <span style="font-size: 14px; color: #586454">of $350</span></div></div>
+      </div>
+
+      <div style="height: 6px; border-radius: 3px; background: #eff0e9; overflow: hidden"><div style="width: 0%; height: 100%; background: #344e3f"></div></div>
+
+      <div style="font-size: 14px; color: #586454; line-height: 1.5; max-width: 560px">One $15 promo on any order plus two $10 promos on non-restaurant orders each month, with DashPass activated on this card. Promos apply at DoorDash checkout, so the statement never confirms them; mark them used here. Through Dec 31, 2029.</div>
+
+      <form style="display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap">
+        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #586454">Amount used<input type="text" value="10.00" style="width: 110px; min-height: 40px; box-sizing: border-box; padding: 0 10px; border: 1px solid #c9d1c0; border-radius: 8px; font-size: 16px; color: #26372e; background: #fffefa"></label>
+        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #586454">On<input type="text" value="Oct 28" style="width: 120px; min-height: 40px; box-sizing: border-box; padding: 0 10px; border: 1px solid #c9d1c0; border-radius: 8px; font-size: 16px; color: #26372e; background: #fffefa"></label>
+        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #586454">Note<input type="text" placeholder="Optional" style="width: 200px; min-height: 40px; box-sizing: border-box; padding: 0 10px; border: 1px solid #c9d1c0; border-radius: 8px; font-size: 16px; color: #26372e; background: #fffefa"></label>
+        <button type="button" style="min-height: 40px; padding: 0 16px; border: 0; border-radius: 999px; background: #344e3f; color: #ffffff; font-size: 14px; font-weight: 600">Mark used</button>
+      </form>
+
+      <div style="display: flex; flex-direction: column; gap: 6px; max-width: 560px">
+        <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #586454">This month's evidence</div>
+        <div style="background: #fffefa; border: 1px solid #e1e4dc; border-radius: 10px; display: flex; flex-direction: column">
+          <div style="display: flex; align-items: center; gap: 12px; padding: 0 14px; min-height: 44px; font-size: 14px">
+            <span style="flex: 1">DoorDash · Oct 20</span>
+            <span class="num">$23.40</span>
+            <a href="Review.dc.html" style="font-size: 12px; font-weight: 600; color: #af8650">Waiting on you ›</a>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 16px; font-size: 12px; color: #586454; margin-top: auto">
+        <span>Enrolled: yes</span><span>Terms verified Oct 28</span><a href="Web.dc.html">Issuer terms</a><a href="Web.dc.html">History</a>
+      </div>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":820}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
