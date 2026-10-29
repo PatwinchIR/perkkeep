@@ -95,21 +95,25 @@ export function CardArtPanel({ card }: { card: Card }) {
                         headers: { "Content-Type": file.type || "image/jpeg" },
                         body: file,
                       },
-                      `?overlay=${overlayUpload ? 1 : 0}`,
+                      // A replacement keeps the current image's choice; the checkbox below
+                      // asks only before there is an image.
+                      `?overlay=${(art ? art.overlay : overlayUpload) ? 1 : 0}`,
                     ),
                   "Card image saved.",
                 );
             }}
           />
         </label>
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={overlayUpload}
-            onChange={(e) => setOverlayUpload(e.target.checked)}
-          />{" "}
-          Draw my name and last four on uploaded images
-        </label>
+        {!art && (
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={overlayUpload}
+              onChange={(e) => setOverlayUpload(e.target.checked)}
+            />{" "}
+            Draw my name and last four on uploaded images
+          </label>
+        )}
         {art && (
           <>
             <label className="check">

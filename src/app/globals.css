@@ -2552,3 +2552,36 @@ dialog::backdrop {
   font-size: var(--text-xs);
   line-height: var(--leading-normal);
 }
+
+/* ---------- Selects ---------- */
+/* Safari ignores height and padding on native selects, so a select sat shorter than the input
+   beside it. Drawing the control ourselves keeps every select at the shared control height; the
+   chevron is two gradients in the text color, so it follows the theme. */
+.form-stack select,
+.form-row select,
+.catalog-select select,
+.filter-row select,
+.account-actions select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: var(--space-8);
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) 50%,
+    calc(100% - 13px) 50%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+}
+
+/* ---------- Card page foot ---------- */
+/* The card image is its own section under the tools, not flush against the last form. */
+.card-art-panel {
+  margin-top: var(--space-8);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--color-border);
+}
+.card-art-panel .form-stack > .text-button {
+  align-self: flex-start;
+}
