@@ -37,6 +37,10 @@ Observed on 2026-10-28 on the Sapphire Reserve page (17 benefits): every row is 
     - Memberships sit in one group, "Status and access", at the bottom of the card page, collapsed into one line that lists them by name.
     - Implementation note: `addResearchedBenefits` should insert these without an allowance rather than skipping them; the current skip exists only because every benefit was assumed to have an amount.
 
+12. **A benefit asks for nothing once it is done.** Observed 2026-10-28: The Shops at Chase credit shows `Confirmed · $250 of $250` and still renders the "Mark used" form. A `Used` row (remaining is zero, or the owner marked it done) and a `Not enrolled` row show no form, no buttons and no chip other than their status, even when expanded; the expanded view shows the evidence that confirmed it and a single "Correct this" link. The "Mark used" form appears only on rows with remaining allowance.
+
+13. **Web layout is master-detail.** At 900px and wider, the list keeps the phone's one-line rows in a left column and the selected benefit's detail (figures, description, "Mark used", evidence) opens in a right pane instead of expanding in place. Narrower than that, the phone layout applies unchanged. The sidebar stays; the sync status moves to its foot.
+
 ## Acceptance
 
 The Sapphire Reserve page with 17 benefits fits in two phone screens when collapsed, with every row answering "how much is left and when it ends" in one line, and the only chips visible are `Review` on rows with a waiting candidate. The existing alert engine (`src/lib/alerts.ts`) is unchanged; only the presentation changes. Browser tests cover: collapsed by default, one row expanded at a time, enrollment checklist appears once and disappears after Save, `Not enrolled` rows stop producing alerts.
