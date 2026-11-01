@@ -9,31 +9,31 @@
       {
         "url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
         "title": "Chase Sapphire Reserve credit card product page (benefits, earn rates, fees, footnotes)",
-        "read_date": "2026-10-28",
+        "read_date": "2026-11-01",
         "kind": "product_page"
       },
       {
         "url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
         "title": "Chase Sapphire Reserve Guide to Benefits (benefits in effect as of 06/11/26)",
-        "read_date": "2026-10-28",
+        "read_date": "2026-11-01",
         "kind": "terms_pdf"
       },
       {
         "url": "https://media.chase.com/news/the-most-rewarding-cards-are-here",
         "title": "Chase press release: The Most Rewarding Cards Are Here (June 23, 2025)",
-        "read_date": "2026-10-28",
+        "read_date": "2026-11-01",
         "kind": "press_release"
       },
       {
         "url": "https://sites.chase.com/services/creatives/pricingandterms.html/content/dam/pricingandterms/LGC64842.html",
-        "title": "Chase Sapphire Reserve Pricing & Terms (fetch blocked: robots_disallowed; fee figures taken from product page instead)",
-        "read_date": "2026-10-28",
+        "title": "Chase Sapphire Reserve Pricing & Terms (read on 2026-11-01: $795 annual fee, $195 per authorized user, no foreign transaction fee)",
+        "read_date": "2026-11-01",
         "kind": "terms_pdf"
       },
       {
         "url": "https://www.doctorofcredit.com/chase-sapphire-reserve-795-annual-fee-change-existing-cardholders-details/",
         "title": "Doctor of Credit: Chase Sapphire Reserve $795 Annual Fee Change & Existing Cardholders Details (secondary, used only to cross-check existing-cardholder timing)",
-        "read_date": "2026-10-28",
+        "read_date": "2026-11-01",
         "kind": "secondary"
       }
     ]
@@ -546,7 +546,7 @@
       "amount_cents": 50000,
       "units": "Up to $500 per traveler",
       "period_type": "custom",
-      "period_note": "Per covered delay.",
+      "period_note": "Per covered traveler per trip.",
       "enrollment_required": false,
       "enrollment_note": "",
       "qualifying_merchants_or_rules": "Common carrier delays of more than 6 hours or requiring an overnight stay; covers unreimbursed expenses such as meals and lodging.",
@@ -554,9 +554,10 @@
       "unlock": null,
       "effective_date": null,
       "end_date": null,
-      "source_url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+      "source_url": "https://static.chasecdn.com/content/services/structured-document/document.en.pdf/card/benefits-center/product-benefits-guide-pdf/508_BGC11559_SAPPHIRE_RESERVE-1.pdf",
       "verified": true,
-      "verification_note": "Read on creditcards.chase.com on 2026-10-28; the Guide to Benefits section for this benefit was truncated in the fetch."
+      "verification_note": "Read in the Guide to Benefits PDF on static.chasecdn.com on 2026-11-01 (benefits in effect as of 06/11/26).",
+      "change_note": "Correction observed 2026-11-01, not a confirmed issuer change. Old: per covered delay, from a truncated fetch. New: $500 per covered traveler per trip, per the Guide to Benefits."
     },
     {
       "id": "travel-accident-insurance",

@@ -4,24 +4,24 @@
     "product": "Ink Business Preferred® Credit Card",
     "network": "Visa",
     "annual_fee_cents": 9500,
-    "product_version_note": "No product refresh noted on the issuer page as of 2026-10-28. Lyft 5x total points promotion runs through 2027-09-30; DoorDash DashPass offer requires activation by 2027-12-31. Issuer page notes that starting 2026-10-01 Ultimate Rewards points transfer to World of Hyatt at a 4:3 ratio (1,000 points become 750). Pricing and terms page (LGC63764) was robots-blocked on 2026-10-28, so annual fee and foreign transaction fee are taken from the product page.",
+    "product_version_note": "No product refresh noted on the issuer page as of 2026-10-28. Lyft 5x total points promotion runs through 2027-09-30; DoorDash DashPass offer requires activation by 2027-12-31. Issuer page notes that starting 2026-10-01 Ultimate Rewards points transfer to World of Hyatt at a 4:3 ratio (1,000 points become 750). Pricing and terms page (LGC63764, accurate as of 9/22/2026, read 2026-11-01) confirms the $95 annual fee and no foreign transaction fee.",
     "sources": [
       {
         "url": "https://creditcards.chase.com/business-credit-cards/ink/business-preferred",
         "title": "Ink Business Preferred® Credit Card | Chase",
-        "read_date": "2026-10-28",
+        "read_date": "2026-11-01",
         "kind": "product_page"
       },
       {
         "url": "https://sites.chase.com/services/creatives/pricingandterms.html/content/dam/pricingandterms/LGC63764.html",
-        "title": "Ink Business Preferred Pricing & Terms (fetch blocked by robots.txt on 2026-10-28; not read)",
-        "read_date": "2026-10-28",
+        "title": "Ink Business Preferred Pricing & Terms (accurate as of 9/22/2026; read on 2026-11-01)",
+        "read_date": "2026-11-01",
         "kind": "terms_pdf"
       },
       {
         "url": "https://www.chase.com/inkbusinesspreferred/rewardsagreement",
-        "title": "Ink Business Preferred Rewards Program Agreement (linked from product page; not fetched)",
-        "read_date": "2026-10-28",
+        "title": "Ink Business Preferred Rewards Program Agreement (redirects to a PDF dated 09/25/2025; keyword search on 2026-11-01, not a full read)",
+        "read_date": "2026-11-01",
         "kind": "benefits_page"
       }
     ]
@@ -191,7 +191,7 @@
       "amount_cents": 1000,
       "units": null,
       "period_type": "monthly",
-      "period_note": "Complimentary DashPass for at least 12 months when activated by 2027-12-31; includes $0 delivery fees and reduced service fees, plus up to $10 monthly off non-restaurant DoorDash orders. The page does not say whether unused monthly amounts roll over.",
+      "period_note": "Complimentary DashPass for at least 12 months when activated by 2027-12-31; includes $0 delivery fees and reduced service fees, plus up to $10 monthly off non-restaurant DoorDash orders. Unused value does not roll over and any part of the $10 not used on an order is forfeited; one redemption per calendar month per person.",
       "enrollment_required": true,
       "enrollment_note": "Activate DashPass with the card by 2027-12-31.",
       "qualifying_merchants_or_rules": "DoorDash orders while DashPass is active with the card; the $10 monthly discount applies to non-restaurant orders.",
@@ -201,7 +201,8 @@
       "end_date": "2027-12-31",
       "source_url": "https://creditcards.chase.com/business-credit-cards/ink/business-preferred",
       "verified": true,
-      "verification_note": "Read on creditcards.chase.com on 2026-10-28. end_date is the activation deadline stated on the page, not necessarily the end of the membership."
+      "verification_note": "Read on creditcards.chase.com on 2026-11-01. end_date is the activation deadline stated on the page, not necessarily the end of the membership.",
+      "change_note": "Added detail observed 2026-11-01. Old: the file said the page does not state whether unused amounts roll over. New: no rollover, unused part of the $10 forfeited, one redemption per calendar month per person."
     }
   ],
   "earn_rates": [
@@ -226,11 +227,12 @@
     {
       "category": "Qualifying Lyft rides and subscriptions booked in the Lyft mobile app (promotion through 2027-09-30; excludes gift cards, car rentals, vehicle service centers, miscellaneous fees)",
       "rate": "5x total points",
-      "cap": null,
+      "cap": "Extra points apply until the first $150,000 in combined 3x purchases each account anniversary year; the rate after that is not stated on the page",
       "period_type": "custom",
       "rotating": false,
       "source_url": "https://creditcards.chase.com/business-credit-cards/ink/business-preferred",
-      "verified": true
+      "verified": true,
+      "change_note": "Correction observed 2026-11-01, not a confirmed issuer change. Old: cap null. New: the extra Lyft points are tied to the $150,000 combined 3x cap."
     }
   ]
 }

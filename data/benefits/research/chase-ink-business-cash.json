@@ -4,18 +4,18 @@
     "product": "Ink Business Cash® Credit Card",
     "network": "Visa",
     "annual_fee_cents": 0,
-    "product_version_note": "No product refresh noted on the issuer page as of 2026-10-28. Lyft 5% total cash back promotion runs through 2027-09-30; Instacart+ membership benefit ends 2027-12-31. Foreign transaction fee is not stated on the product page; the pricing and terms page (LGC63827) was robots-blocked, so it is not recorded here.",
+    "product_version_note": "No product refresh noted on the issuer page as of 2026-10-28. Lyft 5% total cash back promotion runs through 2027-09-30; Instacart+ membership benefit ends 2027-12-31. Pricing and terms page (LGC63827, accurate as of 9/22/2026, read 2026-11-01) states a foreign transaction fee of 3% of each transaction in U.S. dollars.",
     "sources": [
       {
         "url": "https://creditcards.chase.com/business-credit-cards/ink/cash",
         "title": "Ink Business Cash® Credit Card | Chase",
-        "read_date": "2026-10-28",
+        "read_date": "2026-11-01",
         "kind": "product_page"
       },
       {
         "url": "https://sites.chase.com/services/creatives/pricingandterms.html/content/dam/pricingandterms/LGC63827.html",
-        "title": "Ink Business Cash Pricing & Terms (fetch blocked by robots.txt on 2026-10-28; not read)",
-        "read_date": "2026-10-28",
+        "title": "Ink Business Cash Pricing & Terms (accurate as of 9/22/2026; read on 2026-11-01)",
+        "read_date": "2026-11-01",
         "kind": "terms_pdf"
       }
     ]
@@ -169,14 +169,15 @@
       "period_note": "0% intro APR for 12 months from account opening on purchases; a variable APR applies afterward.",
       "enrollment_required": false,
       "enrollment_note": "",
-      "qualifying_merchants_or_rules": "Purchases only. Post-intro variable APR ranges shown on the page on 2026-10-28 were 16.99% to 29.99% and 24.99% to 29.99% depending on the rate range assigned.",
+      "qualifying_merchants_or_rules": "Purchases only. After the intro period the Pricing & Terms page (accurate as of 9/22/2026) states a variable purchase APR of 16.99% to 24.99%.",
       "credit_descriptor_hint": null,
       "unlock": null,
       "effective_date": null,
       "end_date": null,
-      "source_url": "https://creditcards.chase.com/business-credit-cards/ink/cash",
+      "source_url": "https://sites.chase.com/services/creatives/pricingandterms.html/content/dam/pricingandterms/LGC63827.html",
       "verified": true,
-      "verification_note": "Read on creditcards.chase.com on 2026-10-28."
+      "verification_note": "Read on sites.chase.com Pricing & Terms on 2026-11-01.",
+      "change_note": "Correction observed 2026-11-01, not a confirmed issuer change. Old: post-intro APR ranges 16.99% to 29.99% and 24.99% to 29.99%, read from garbled product page text. New: 16.99% to 24.99% variable, per Pricing & Terms, which was not readable on 2026-10-28."
     },
     {
       "id": "instacart-plus-membership-and-monthly-credit",
@@ -185,7 +186,7 @@
       "amount_cents": 2000,
       "units": null,
       "period_type": "monthly",
-      "period_note": "Complimentary three-month Instacart+ membership; activated members get a $20 monthly Instacart credit. Benefit ends 2027-12-31. The page does not say whether unused credit rolls over.",
+      "period_note": "Complimentary three-month Instacart+ membership; activated members get a $20 monthly Instacart credit. Benefit ends 2027-12-31. Unused credit does not roll over to the next month. Activate the complimentary membership between 2025-05-01 and 2027-12-31.",
       "enrollment_required": true,
       "enrollment_note": "Requires enrollment/activation of Instacart+ with the card. Membership auto-renews at $99 per year after the complimentary period unless canceled.",
       "qualifying_merchants_or_rules": "Instacart purchases while the Instacart+ membership is active and paid with the card.",
@@ -195,7 +196,8 @@
       "end_date": "2027-12-31",
       "source_url": "https://creditcards.chase.com/business-credit-cards/ink/cash",
       "verified": true,
-      "verification_note": "Read on creditcards.chase.com on 2026-10-28."
+      "verification_note": "Read on creditcards.chase.com on 2026-11-01.",
+      "change_note": "Added detail observed 2026-11-01. Old: the file said the page does not state whether unused credit rolls over. New: it does not roll over; activation window 2025-05-01 to 2027-12-31 recorded."
     }
   ],
   "earn_rates": [

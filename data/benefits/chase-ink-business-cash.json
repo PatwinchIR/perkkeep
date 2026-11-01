@@ -6,14 +6,14 @@
   "rules": [
     {
       "id": "ink-cash/instacart-credit",
-      "version": "2026-10-28",
+      "version": "2026-11-01",
       "name": "Instacart+ membership (3 months) and $20 monthly Instacart credit",
       "period": "monthly",
       "amount_cents": 2000,
       "enrollment_required": true,
-      "eligibility_notes": "Instacart purchases while the Instacart+ membership is active and paid with the card. Complimentary three-month Instacart+ membership; activated members get a $20 monthly Instacart credit. Benefit ends 2027-12-31. The page does not say whether unused credit rolls over. Requires enrollment/activation of Instacart+ with the card. Membership auto-renews at $99 per year after the complimentary period unless canceled.",
+      "eligibility_notes": "Instacart purchases while the Instacart+ membership is active and paid with the card. Complimentary three-month Instacart+ membership; activated members get a $20 monthly Instacart credit. Benefit ends 2027-12-31. Unused credit does not roll over to the next month. Activate the complimentary membership between 2025-05-01 and 2027-12-31. Requires enrollment/activation of Instacart+ with the card. Membership auto-renews at $99 per year after the complimentary period unless canceled.",
       "source_url": "https://creditcards.chase.com/business-credit-cards/ink/cash",
-      "checked_on": "2026-10-28",
+      "checked_on": "2026-11-01",
       "effective_from": null,
       "effective_to": "2028-01-01",
       "verified": true,
